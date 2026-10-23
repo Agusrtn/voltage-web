@@ -387,7 +387,6 @@ function ChannelAdmin({ media }) {
 }
 
 function ProgramAdmin({ media }) {
-function ProgramAdmin({ media }) {
   const [autoScheduling, setAutoScheduling] = useState(false)
   const [autoNotice, setAutoNotice] = useState(null)
   const [autoError, setAutoError] = useState(null)
