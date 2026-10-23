@@ -70,6 +70,14 @@ footer span { color: #b4a2ed; } footer small { margin-left: 14px; letter-spacing
 .youtube-sources a { display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #754032; color: #ffb19d; background: rgba(20,12,10,.72); font-size: 10px; font-weight: 700; }
 .youtube-sources a:hover { border-color: #ff7658; color: #fff; }
 .youtube-sources a span { color: #ff7658; }
+.youtube-iframe-host { position: absolute; inset: 0; width: 100%; height: 100%; }
+.youtube-iframe-host iframe { width: 100%; height: 100%; border: 0; }
+.broadcast-live-badge { position: absolute; z-index: 2; top: 16px; left: 16px; display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px; color: #fff; background: rgba(12,12,12,.82); font: 600 9px 'DM Mono', monospace; letter-spacing: .13em; }
+.broadcast-live-badge i { width: 7px; height: 7px; border-radius: 50%; background: #ff4937; box-shadow: 0 0 12px #ff4937; animation: live-pulse 1.6s infinite; }
+.broadcast-sound { position: absolute; z-index: 2; right: 16px; bottom: 16px; padding: 9px 12px; color: #fff; border: 1px solid rgba(255,255,255,.38); background: rgba(12,12,12,.78); font-size: 10px; font-weight: 700; }
+.broadcast-sound:hover:not(:disabled) { border-color: #fff; background: rgba(12,12,12,.95); }
+.broadcast-sound:disabled { opacity: .7; }
+@keyframes live-pulse { 50% { opacity: .38; box-shadow: 0 0 3px #ff4937; } }
 
 /* VOLTAGE visual identity: bold editorial type, dark canvas and live neon glow. */
 :root { --voltage-accent: #ff4d32; --voltage-pink: #f02a8a; --voltage-lime: #d8ff3e; font-family: 'Monument Grotesk', 'Space Grotesk', Arial, sans-serif; }
