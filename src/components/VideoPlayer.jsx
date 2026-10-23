@@ -108,13 +108,6 @@ function YoutubeBroadcast({ videoId, title, syncStartAt, serverClockOffsetMs, li
   </>
 }
 
-function LocalLoopBroadcast({ source, title, liveLabel, onError, onDimensions }) {
-  const videoRef = useRef(null)
-  const onErrorRef = useRef(onError)
-  const [muted, setMuted] = useState(true)
-  const [failed, setFailed] = useState(false)
-  onErrorRef.current = onError
-
 function LocalScheduledVideo({ source, title, syncStartAt, serverClockOffsetMs, liveLabel, onError, onDimensions }) {
   const videoRef = useRef(null)
   const [muted, setMuted] = useState(true)
@@ -162,6 +155,13 @@ function LocalScheduledVideo({ source, title, syncStartAt, serverClockOffsetMs, 
     <button className="broadcast-sound" type="button" onClick={() => setMuted((value) => !value)} aria-label={muted ? 'Activar sonido' : 'Silenciar'}>{muted ? 'Activar sonido' : 'Silenciar'}</button>
   </>
 }
+
+function LocalLoopBroadcast({ source, title, liveLabel, onError, onDimensions }) {
+  const videoRef = useRef(null)
+  const onErrorRef = useRef(onError)
+  const [muted, setMuted] = useState(true)
+  const [failed, setFailed] = useState(false)
+  onErrorRef.current = onError
 
   useEffect(() => {
     const video = videoRef.current
