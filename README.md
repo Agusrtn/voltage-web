@@ -62,8 +62,9 @@ Sin variables válidas, la aplicación inicia en modo de muestra: las tarjetas n
    supabase db push
    ```
 
-4. Comprueba en **Database > Policies** que RLS esté activado para las seis tablas y que las políticas se hayan creado.
-5. Añade las variables reales al archivo `.env` y reinicia Vite.
+4. Ejecuta también [`supabase/migrations/002_broadcast_server_clock.sql`](supabase/migrations/002_broadcast_server_clock.sql). Expone solo la hora oficial de PostgreSQL para alinear estados de guía y offsets de reproducción; no lee ni modifica tablas.
+5. Comprueba en **Database > Policies** que RLS esté activado para las seis tablas y que las políticas se hayan creado.
+6. Añade las variables reales al archivo `.env` y reinicia Vite.
 
 ### Seguridad implementada
 
@@ -103,7 +104,9 @@ Tras obtener el rol admin:
 3. En **Programas**, selecciona un canal y define inicio/fin. Pega la URL compartible de un vídeo o directo de YouTube (o MP4 HTTPS) en la fuente opcional. El reproductor inserta vídeos concretos; una página de canal como `youtube.com/@voltagerbx` no es una fuente de vídeo insertable. El formulario y PostgreSQL rechazan solapes dentro de ese canal. Los valores se convierten a UTC; se muestran con `VITE_APP_TIMEZONE`.
 4. En **Eventos**, añade el intervalo y, opcionalmente, un canal asociado. `scheduled` se vuelve “En directo” únicamente cuando la hora actual está dentro de su intervalo; `cancelled` nunca se reproduce. Para evitar interrupciones simultáneas de un mismo canal, los eventos asociados con fecha de fin no pueden solaparse en PostgreSQL.
 
-Un evento vivo tiene prioridad visual y de fuente sobre el programa regular de su canal. Al terminar, el reproductor vuelve al programa actual. El desplazamiento temporal se intenta únicamente con una fuente de vídeo de programa compatible con YouTube; YouTube, directos y vídeos del propietario pueden prohibir inserción o búsqueda. La app muestra entonces un estado de error/limitación, en lugar de prometer continuidad no verificable.
+Un evento vivo tiene prioridad visual y de fuente sobre el programa regular de su canal. Al terminar, el reproductor vuelve al programa actual. La sección **Televisión** incluye sintonizador numerado, EPG con búsqueda y salto de 12 horas, progreso del programa y una vista mosaico de miniaturas (sin abrir muchos reproductores simultáneos). La guía y los estados consultan la hora oficial de PostgreSQL; si falta la migración 002 o no hay conexión, la interfaz usa el reloj local. Los horarios no se reinician al navegar: se evalúan contra marcas de tiempo absolutas.
+
+Los programas de vídeo bajo demanda comienzan en el punto correspondiente a su hora de inicio y el reproductor corrige desfases periódicamente. Una emisión real de YouTube (`/live/`) reproduce desde el directo sin aplicar ese desplazamiento. YouTube controla la disponibilidad de inserción, autoplay, calidad y búsqueda; no se puede prometer sincronía al fotograma ni quitar su marca.
 
 ## Fuentes de vídeo
 

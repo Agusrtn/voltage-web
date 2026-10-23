@@ -24,6 +24,20 @@ export function useMediaData(user) {
   const [savedVideos, setSavedVideos] = useState([])
   const [loading, setLoading] = useState(supabaseConfigured)
   const [error, setError] = useState(null)
+  const [clockOffset, setClockOffset] = useState(null)
+  const [clockTick, setClockTick] = useState(Date.now())
+
+  const syncServerClock = useCallback(async () => {
+    if (!supabase) return
+    const requestStartedAt = Date.now()
+    const { data, error: clockError } = await supabase.rpc('broadcast_server_time')
+    const requestFinishedAt = Date.now()
+    if (clockError || !data) return
+    const serverTime = new Date(data).getTime()
+    if (!Number.isFinite(serverTime)) return
+    const midpoint = requestStartedAt + (requestFinishedAt - requestStartedAt) / 2
+    setClockOffset(serverTime - midpoint)
+  }, [])
 
   const refresh = useCallback(async () => {
     if (!supabase) {
@@ -49,6 +63,33 @@ export function useMediaData(user) {
   }, [user])
 
   useEffect(() => { refresh() }, [refresh])
+
+  useEffect(() => {
+    if (!supabase) return undefined
+    const subscription = supabase.channel('vte-broadcast-schedule')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'channels' }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'programs' }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, refresh)
+      .subscribe()
+    const fallback = window.setInterval(refresh, 60000)
+    return () => {
+      window.clearInterval(fallback)
+      supabase.removeChannel(subscription)
+    }
+  }, [refresh])
+
+  useEffect(() => {
+    syncServerClock()
+    const syncTimer = window.setInterval(syncServerClock, 60000)
+    const tickTimer = window.setInterval(() => setClockTick(Date.now()), 1000)
+    const onVisibilityChange = () => { if (document.visibilityState === 'visible') syncServerClock() }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      window.clearInterval(syncTimer)
+      window.clearInterval(tickTimer)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [syncServerClock])
 
   const saveEntity = async (table, entity) => {
     if (!supabase) throw new Error(configMessage())
@@ -78,5 +119,6 @@ export function useMediaData(user) {
     await refresh()
   }
 
-  return { channels, programs, events, savedVideos, loading, error, isDemo: !supabaseConfigured, refresh, saveEntity, deleteEntity, toggleSavedVideo }
+  const serverNow = new Date(clockTick + (clockOffset ?? 0))
+  return { channels, programs, events, savedVideos, loading, error, isDemo: !supabaseConfigured, serverNow, serverClockSynced: clockOffset !== null, refresh, saveEntity, deleteEntity, toggleSavedVideo }
 }

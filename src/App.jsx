@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react'
 import { useAuth } from './hooks/useAuth'
 import { useMediaData } from './hooks/useMediaData'
 import { configMessage } from './lib/supabase'
-import { getEventStatus } from './lib/schedule'
+import { getChannelSchedule, getEventStatus, formatDateTime } from './lib/schedule'
+import { youtubeVideoId } from './lib/media'
 import { adminAccessState } from './lib/access'
 import { ChannelMark, EmptyState, LoadingGrid, Notice, Status } from './components/ui'
 import { VideoPlayer } from './components/VideoPlayer'
@@ -59,35 +60,33 @@ function AppShell() {
 function HomePage({ auth, media }) {
   const [channelId, setChannelId] = useState(null)
   const channel = media.channels.find((item) => item.id === channelId) || media.channels.find((item) => item.is_active) || media.channels[0]
-  const liveEvent = media.events.find((event) => event.channel_id === channel?.id && getEventStatus(event) === 'live')
-  return <>
+  const liveEvent = media.events.find((event) => event.channel_id === channel?.id && getEventStatus(event, media.serverNow) === 'live')
+    return <>
     <section className="hero"><div className="hero-copy"><span className="eyebrow">UNA NUEVA SEÑAL · VOLTAGE®</span><h1>Esto es <span>VOLTAGE.</span></h1><p>Un espacio para descubrir música, artistas y cultura. Entra en directo y encuentra lo que viene.</p><div className="hero-actions"><Link className="button primary" to="/tv">Ver televisión <span>↗</span></Link><Link className="button quiet" to="/guia">Explorar guía</Link></div></div><div className="hero-art" aria-label="VOLTAGE, señal en movimiento"><span>VOLTAGE</span><i>TELEVISIÓN · MÚSICA · CULTURA</i><div className="signal a" /><div className="signal b" /><div className="signal c" /></div></section>
-    <section className="home-player section-block"><div className="section-heading"><div><span className="eyebrow">EN PANTALLA</span><h2>Televisión en directo</h2></div><Link to="/tv">Abrir reproductor →</Link></div><VideoPlayer channel={channel} programs={media.programs} activeEvent={liveEvent} timezone={timezone} /></section>
+    <section className="home-player section-block"><div className="section-heading"><div><span className="eyebrow">EN PANTALLA</span><h2>Televisión en directo</h2></div><Link to="/tv">Abrir reproductor →</Link></div><VideoPlayer channel={channel} programs={media.programs} activeEvent={liveEvent} timezone={timezone} serverNow={media.serverNow} serverClockSynced={media.serverClockSynced} /></section>
     <section className="section-block"><div className="section-heading"><div><span className="eyebrow">SEÑAL</span><h2>Canales disponibles</h2></div><Link to="/canales">Todos los canales →</Link></div>{media.loading ? <LoadingGrid /> : <div className="channel-rail">{media.channels.slice(0, 4).map((item) => <button className={`channel-card ${channel?.id === item.id ? 'selected' : ''}`} key={item.id} onClick={() => setChannelId(item.id)}><ChannelMark channel={item} /><div><Status tone={item.is_active ? 'live' : 'muted'}>{item.is_active ? 'Disponible' : 'Pausado'}</Status><strong>{item.name}</strong><p>{item.description}</p></div><span className="card-arrow">↗</span></button>)}</div>}</section>
-    <section className="section-block split-overview"><ProgramSnapshot channels={media.channels} programs={media.programs} /><EventSnapshot events={media.events} /></section>
+    <section className="section-block split-overview"><ProgramSnapshot channels={media.channels} programs={media.programs} now={media.serverNow} /><EventSnapshot events={media.events} now={media.serverNow} /></section>
     <section className="member-cta"><div><span className="eyebrow">TU ESPACIO</span><h2>Guarda lo que quieres volver a ver.</h2><p>Mi lista se sincroniza de forma segura entre dispositivos cuando inicias sesión.</p></div><Link className="button primary" to={auth.user ? '/mi-lista' : '/acceso'}>{auth.user ? 'Ir a Mi lista' : 'Crear cuenta'}</Link></section>
   </>
 }
 
-function ProgramSnapshot({ channels, programs }) {
+function ProgramSnapshot({ channels, programs, now }) {
   const active = channels.filter((channel) => channel.is_active).slice(0, 3)
-  return <section className="overview-card"><div className="section-heading"><div><span className="eyebrow">AHORA Y DESPUÉS</span><h2>Programación</h2></div><Link to="/guia">Guía completa →</Link></div>{active.length ? active.map((channel) => <ProgramLine key={channel.id} channel={channel} programs={programs} />) : <p className="muted-copy">Aún no hay canales publicados.</p>}</section>
+  return <section className="overview-card"><div className="section-heading"><div><span className="eyebrow">AHORA Y DESPUÉS</span><h2>Programación</h2></div><Link to="/guia">Guía completa →</Link></div>{active.length ? active.map((channel) => <ProgramLine key={channel.id} channel={channel} programs={programs} now={now} />) : <p className="muted-copy">Aún no hay canales publicados.</p>}</section>
 }
 
-function ProgramLine({ channel, programs }) {
-  const now = new Date()
-  const current = programs.find((program) => program.channel_id === channel.id && new Date(program.starts_at) <= now && new Date(program.ends_at) > now)
-  const next = programs.filter((program) => program.channel_id === channel.id && new Date(program.starts_at) > now).sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at))[0]
+function ProgramLine({ channel, programs, now }) {
+  const { current, next } = getChannelSchedule(channel.id, programs, now)
   return <div className="program-line"><ChannelMark channel={channel} compact /><div><strong>{current?.title || 'Sin emisión programada'}</strong><small>{next ? `Después · ${next.title}` : 'No hay siguiente emisión'}</small></div><Status tone={current ? 'live' : 'muted'}>{current ? 'Ahora' : 'Sin guía'}</Status></div>
 }
 
-function EventSnapshot({ events }) {
-  const upcoming = events.filter((event) => getEventStatus(event) !== 'finished').slice(0, 3)
-  return <section className="overview-card"><div className="section-heading"><div><span className="eyebrow">AGENDA</span><h2>Eventos</h2></div><Link to="/eventos">Ver agenda →</Link></div>{upcoming.length ? upcoming.map((event) => <EventRow key={event.id} event={event} />) : <div className="compact-empty"><span>◇</span><p>No hay eventos publicados todavía.</p></div>}</section>
+function EventSnapshot({ events, now }) {
+  const upcoming = events.filter((event) => getEventStatus(event, now) !== 'finished').slice(0, 3)
+  return <section className="overview-card"><div className="section-heading"><div><span className="eyebrow">AGENDA</span><h2>Eventos</h2></div><Link to="/eventos">Ver agenda →</Link></div>{upcoming.length ? upcoming.map((event) => <EventRow key={event.id} event={event} now={now} />) : <div className="compact-empty"><span>◇</span><p>No hay eventos publicados todavía.</p></div>}</section>
 }
 
-function EventRow({ event }) {
-  const status = getEventStatus(event)
+function EventRow({ event, now }) {
+  const status = getEventStatus(event, now)
   return <div className="event-row"><div className="date-chip"><b>{new Intl.DateTimeFormat('es-ES', { day: '2-digit', timeZone: timezone }).format(new Date(event.starts_at))}</b><small>{new Intl.DateTimeFormat('es-ES', { month: 'short', timeZone: timezone }).format(new Date(event.starts_at))}</small></div><div><strong>{event.title}</strong><small>{new Intl.DateTimeFormat('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: timezone }).format(new Date(event.starts_at))}</small></div><Status tone={status === 'live' ? 'live' : 'violet'}>{status === 'live' ? 'Directo' : 'Próximamente'}</Status></div>
 }
 
@@ -95,20 +94,117 @@ function TelevisionPage({ media }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const channelId = searchParams.get('channel')
   const [message, setMessage] = useState(null)
-  const channel = media.channels.find((item) => item.id === channelId) || media.channels.find((item) => item.is_active) || media.channels[0]
-  const liveEvent = media.events.find((event) => event.channel_id === channel?.id && getEventStatus(event) === 'live')
-  return <div className="page page-tv"><PageIntro eyebrow="REPRODUCTOR" title="Televisión" detail="La programación se ajusta a la hora actual de la zona configurada." />{message && <Notice tone="error">{message}</Notice>}<VideoPlayer channel={channel} programs={media.programs} activeEvent={liveEvent} timezone={timezone} onPlayError={() => setMessage('La fuente no se ha podido reproducir. Comprueba que permite inserción y que su URL sea válida.')} /><section className="section-block"><div className="section-heading"><div><span className="eyebrow">CAMBIA DE SEÑAL</span><h2>Elige un canal</h2></div></div><div className="channel-selector">{media.channels.map((item) => <button key={item.id} onClick={() => { setSearchParams({ channel: item.id }); setMessage(null) }} className={channel?.id === item.id ? 'active' : ''} aria-pressed={channel?.id === item.id}><ChannelMark channel={item} compact /><span><b>{item.name}</b><small>{item.is_active ? 'Disponible' : 'Pausado'}</small></span></button>)}</div></section></div>
+  const [panel, setPanel] = useState('guide')
+  const [search, setSearch] = useState('')
+  const [timeShift, setTimeShift] = useState(0)
+  const channels = media.channels
+  const channel = channels.find((item) => item.id === channelId) || channels.find((item) => item.is_active) || channels[0]
+  const channelNumber = Math.max(1, channels.findIndex((item) => item.id === channel?.id) + 1)
+  const { current, next, schedule } = getChannelSchedule(channel?.id, media.programs, media.serverNow)
+  const liveEvent = media.events.find((event) => event.channel_id === channel?.id && getEventStatus(event, media.serverNow) === 'live')
+  const dayStart = media.serverNow.getTime() + timeShift * 12 * 60 * 60 * 1000
+  const timeWindowPrograms = schedule.filter((item) => new Date(item.ends_at).getTime() > dayStart && new Date(item.starts_at).getTime() < dayStart + 12 * 60 * 60 * 1000)
+  const filteredPrograms = timeWindowPrograms.filter((item) => `${item.title} ${item.description}`.toLowerCase().includes(search.toLowerCase()))
+  const tune = (id) => {
+    setSearchParams({ channel: id })
+    setMessage(null)
+  }
+  const mode = searchParams.get('view') === 'mosaic' ? 'mosaic' : 'tv'
+  const setMode = (nextMode) => setSearchParams({ ...(channel ? { channel: channel.id } : {}), ...(nextMode === 'mosaic' ? { view: 'mosaic' } : {}) })
+
+  if (mode === 'mosaic') return <div className="page page-tv tv-page">
+    <PageIntro eyebrow="VOLTAGE · MULTICANAL" title="Mosaico de señales" detail="Vista rápida de los canales y su programación. Selecciona una señal para sintonizarla; los mosaicos usan metadatos y miniaturas para no cargar varios reproductores." />
+    <div className="tv-mode-switch"><button onClick={() => setMode('tv')}>Canal &amp; guía</button><button className="active" aria-current="page">Mosaico</button></div>
+    <MosaicGrid channels={channels} programs={media.programs} serverNow={media.serverNow} onTune={tune} />
+  </div>
+
+  return <div className="page page-tv tv-page">
+    <div className="tv-page-heading"><PageIntro eyebrow="VTE MEDIA · SEÑAL EN CONTINUIDAD" title="Televisión" detail="Sintoniza una señal y consulta la programación sincronizada con la hora del servidor." /><div className="tv-mode-switch"><button className="active" aria-current="page">Canal &amp; guía</button><button onClick={() => setMode('mosaic')}>Mosaico</button></div></div>
+    {message && <Notice tone="error">{message}</Notice>}
+    {media.error && <Notice tone="error">{media.error}</Notice>}
+    <div className="tv-console">
+      <div className="tv-main">
+        {channel ? <VideoPlayer channel={channel} channelNumber={channelNumber} programs={media.programs} activeEvent={liveEvent} timezone={timezone} serverNow={media.serverNow} serverClockSynced={media.serverClockSynced} onPlayError={() => setMessage('No se pudo cargar la fuente. Comprueba el enlace y que permita reproducción insertada.')} /> : <EmptyState title="No hay canales" detail="Añade canales desde Administración para empezar a emitir." />}
+        <section className="tv-now-playing">
+          <div className="tv-program-heading"><div><span className="eyebrow">AHORA EN {channel?.name || 'VTE'}</span><h2>{liveEvent?.title || current?.title || 'Sin programa en emisión'}</h2><p>{liveEvent?.description || current?.description || 'La programación aparecerá aquí cuando se publique desde Administración.'}</p></div><Status tone={liveEvent || current ? 'live' : 'muted'}>{liveEvent ? 'Evento en directo' : current ? 'En emisión' : 'En espera'}</Status></div>
+          {current && <ProgramProgress program={current} now={media.serverNow} timezone={timezone} />}
+          <div className="tv-next-strip"><span>PRÓXIMO</span><strong>{next?.title || 'Sin próxima emisión programada'}</strong>{next && <time>{formatDateTime(next.starts_at, timezone, false)} · {formatDateTime(next.ends_at, timezone, false)}</time>}</div>
+        </section>
+      </div>
+      <aside className="tv-side-panel" aria-label="Guía y selector de canales">
+        <div className="tv-panel-tabs" role="tablist" aria-label="Panel de televisión">
+          <button role="tab" aria-selected={panel === 'guide'} className={panel === 'guide' ? 'active' : ''} onClick={() => setPanel('guide')}>Guía &amp; programas</button>
+          <button role="tab" aria-selected={panel === 'channels'} className={panel === 'channels' ? 'active' : ''} onClick={() => setPanel('channels')}>Canales</button>
+        </div>
+        {panel === 'guide' ? <>
+          <div className="epg-controls"><label className="epg-search"><span aria-hidden="true">⌕</span><input aria-label="Buscar programas" placeholder="Buscar en la guía" value={search} onChange={(event) => setSearch(event.target.value)} /></label><div className="epg-time-nav"><button aria-label="Mostrar horario anterior" onClick={() => setTimeShift((value) => value - 1)}>←</button><button onClick={() => setTimeShift(0)}>Ahora</button><button aria-label="Mostrar horario siguiente" onClick={() => setTimeShift((value) => value + 1)}>→</button></div></div>
+          <div className="epg-window-label">{timeShift === 0 ? 'AHORA · PRÓXIMAS 12 H' : formatDateTime(new Date(dayStart), timezone, true)}</div>
+          <div className="epg-program-list">{filteredPrograms.length ? filteredPrograms.map((program) => <EpgProgram key={program.id} program={program} now={media.serverNow} timezone={timezone} currentChannelId={channel?.id} onTune={tune} />) : <div className="epg-empty">{search ? 'No hay programas con ese nombre.' : 'No hay programas en este intervalo.'}</div>}</div>
+        </> : <>
+          <div className="dial-heading"><span className="eyebrow">SINTONIZADOR</span><span>{channels.length} SEÑALES</span></div>
+          <div className="tv-dial-list">{channels.map((item, index) => {
+            const scheduleState = getChannelSchedule(item.id, media.programs, media.serverNow)
+            const airing = media.events.some((event) => event.channel_id === item.id && getEventStatus(event, media.serverNow) === 'live') || Boolean(scheduleState.current)
+            return <button type="button" key={item.id} className={`tv-dial-item ${channel?.id === item.id ? 'selected' : ''}`} onClick={() => tune(item.id)} aria-pressed={channel?.id === item.id}>
+              <span className="dial-number">{String(index + 1).padStart(2, '0')}</span><ChannelMark channel={item} compact /><span className="dial-copy"><b>{item.name}</b><small>{channelCategory(item)} · {scheduleState.current?.title || scheduleState.next?.title || 'Sin guía'}</small></span><Status tone={airing ? 'live' : item.is_active ? 'violet' : 'muted'}>{airing ? 'Aire' : item.is_active ? 'Lista' : 'Pausa'}</Status>
+            </button>
+          })}</div>
+        </>}
+      </aside>
+    </div>
+  </div>
 }
 
 function GuidePage({ media }) {
-  const [now, setNow] = useState(new Date())
-  useEffect(() => { const id = window.setInterval(() => setNow(new Date()), 30000); return () => window.clearInterval(id) }, [])
-  return <div className="page"><PageIntro eyebrow="EN HORA" title="Guía TV" detail={`Actualizada automáticamente · ${new Intl.DateTimeFormat('es-ES', { dateStyle: 'full', timeStyle: 'short', timeZone: timezone }).format(now)}`} />{media.error && <Notice tone="error">{media.error}</Notice>}{media.loading ? <LoadingGrid /> : media.channels.length ? <div className="guide-list">{media.channels.map((channel) => <GuideChannel key={channel.id} channel={channel} programs={media.programs} now={now} />)}</div> : <EmptyState title="La guía está vacía" detail="Publica canales y programas desde el panel de administración." />}</div>
+  const [search, setSearch] = useState('')
+  const [timeShift, setTimeShift] = useState(0)
+  const now = media.serverNow
+  const windowStart = now.getTime() + timeShift * 12 * 60 * 60 * 1000
+  const windowEnd = windowStart + 12 * 60 * 60 * 1000
+  const visibleChannels = media.channels.filter((channel) => media.programs.some((program) => program.channel_id === channel.id && new Date(program.ends_at).getTime() > windowStart && new Date(program.starts_at).getTime() < windowEnd && `${program.title} ${program.description} ${channel.name}`.toLowerCase().includes(search.toLowerCase())))
+  return <div className="page epg-page"><div className="epg-page-top"><PageIntro eyebrow="VTE MEDIA · EPG" title="Guía de programación" detail={`Horarios sincronizados con Supabase · ${formatDateTime(now, timezone, true)}`} /><div className="epg-page-tools"><label className="epg-search"><span aria-hidden="true">⌕</span><input aria-label="Buscar programas o canales" placeholder="Buscar programas o canales" value={search} onChange={(event) => setSearch(event.target.value)} /></label><div className="epg-time-nav"><button onClick={() => setTimeShift((value) => value - 1)}>← 12 h</button><button onClick={() => setTimeShift(0)}>Ahora</button><button onClick={() => setTimeShift((value) => value + 1)}>12 h →</button></div></div></div>{!media.serverClockSynced && media.isDemo && <Notice>Modo de muestra: la guía usa el reloj de este dispositivo porque Supabase aún no está configurado.</Notice>}{media.error && <Notice tone="error">{media.error}</Notice>}{media.loading ? <LoadingGrid /> : visibleChannels.length ? <div className="guide-list">{visibleChannels.map((channel) => <GuideChannel key={channel.id} channel={channel} programs={media.programs} now={now} timezone={timezone} windowStart={windowStart} windowEnd={windowEnd} />)}</div> : <EmptyState title={search ? 'No se encontraron programas' : 'La guía está vacía'} detail={search ? 'Prueba con otro título o canal.' : 'Publica programas desde Administración para completar la guía.'} />}</div>
 }
 
-function GuideChannel({ channel, programs, now }) {
-  const items = programs.filter((item) => item.channel_id === channel.id).filter((item) => new Date(item.ends_at) > now).slice(0, 6)
-  return <section className="guide-channel"><header><ChannelMark channel={channel} compact /><div><h2>{channel.name}</h2><p>{channel.is_active ? 'Señal disponible' : 'Canal pausado'}</p></div></header><div className="guide-timeline">{items.length ? items.map((program) => { const current = new Date(program.starts_at) <= now && new Date(program.ends_at) > now; return <article className={current ? 'current' : ''} key={program.id}><time>{new Intl.DateTimeFormat('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: timezone }).format(new Date(program.starts_at))}</time><div><Status tone={current ? 'live' : 'muted'}>{current ? 'Ahora' : 'Programado'}</Status><h3>{program.title}</h3>{program.description && <p>{program.description}</p>}</div></article> }) : <p className="no-schedule">No hay programación futura publicada.</p>}</div></section>
+function GuideChannel({ channel, programs, now, timezone, windowStart, windowEnd }) {
+  const items = programs.filter((item) => item.channel_id === channel.id).filter((item) => new Date(item.ends_at).getTime() > windowStart && new Date(item.starts_at).getTime() < windowEnd)
+  return <section className="guide-channel"><header><ChannelMark channel={channel} compact /><div><h2>{channel.name}</h2><p>{channel.is_active ? 'Señal disponible' : 'Canal pausado'} · {channelCategory(channel)}</p></div><Link className="guide-tune-link" to={`/tv?channel=${channel.id}`}>Sintonizar ↗</Link></header><div className="guide-timeline">{items.length ? items.map((program) => { const starts = new Date(program.starts_at).getTime(); const ends = new Date(program.ends_at).getTime(); const current = starts <= now.getTime() && ends > now.getTime(); return <article className={current ? 'current' : ''} key={program.id}><time>{formatDateTime(program.starts_at, timezone, false)}<small>{formatDateTime(program.ends_at, timezone, false)}</small></time><div className="guide-program-copy"><Status tone={current ? 'live' : 'muted'}>{current ? 'En emisión' : starts > now.getTime() ? 'Próximo' : 'Finaliza'}</Status><h3>{program.title}</h3>{program.description && <p>{program.description}</p>}{current && <ProgramProgress program={program} now={now} timezone={timezone} />}</div></article> }) : <p className="no-schedule">No hay programación en este intervalo.</p>}</div></section>
+}
+
+function ProgramProgress({ program, now, timezone }) {
+  const start = new Date(program.starts_at).getTime()
+  const end = new Date(program.ends_at).getTime()
+  const progress = Math.min(100, Math.max(0, ((now.getTime() - start) / (end - start)) * 100))
+  return <div className="program-progress" aria-label={`Programa al ${Math.round(progress)} por ciento`}><div><span>PROGRESO</span><time>{formatDateTime(program.ends_at, timezone, false)}</time></div><span className="progress-track"><i style={{ width: `${progress}%` }} /></span></div>
+}
+
+function EpgProgram({ program, now, timezone, currentChannelId, onTune }) {
+  const starts = new Date(program.starts_at).getTime()
+  const ends = new Date(program.ends_at).getTime()
+  const current = starts <= now.getTime() && ends > now.getTime()
+  return <article className={`epg-program ${current ? 'current' : ''}`}>
+    <div className="epg-time"><time>{formatDateTime(program.starts_at, timezone, false)}</time><span>{formatDateTime(program.ends_at, timezone, false)}</span></div>
+    <div className="epg-program-info"><div className="epg-program-state"><Status tone={current ? 'live' : 'muted'}>{current ? 'Ahora' : starts > now.getTime() ? 'Próximo' : 'En curso'}</Status>{current && <span>EN EMISIÓN</span>}</div><h3>{program.title}</h3>{program.description && <p>{program.description}</p>}{current && <ProgramProgress program={program} now={now} timezone={timezone} />}</div>
+    {program.channel_id !== currentChannelId && <button className="epg-tune-button" onClick={() => onTune(program.channel_id)}>Ver canal</button>}
+  </article>
+}
+
+function MosaicGrid({ channels, programs, serverNow, onTune }) {
+  return <div className="mosaic-grid">{channels.map((channel, index) => {
+    const { current, next } = getChannelSchedule(channel.id, programs, serverNow)
+    const videoId = youtubeVideoId(current?.video_source || channel.video_source)
+    const thumbnail = videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : ''
+    return <button type="button" className="mosaic-tile" key={channel.id} onClick={() => onTune(channel.id)}>
+      <span className="mosaic-visual" style={thumbnail ? { backgroundImage: `linear-gradient(180deg, transparent 32%, rgba(5,9,15,.88)), url("${thumbnail}")` } : undefined}><span className="mosaic-number">{String(index + 1).padStart(2, '0')}</span><Status tone={current || channel.is_active ? 'live' : 'muted'}>{current ? 'En emisión' : channel.is_active ? 'Disponible' : 'Pausado'}</Status><ChannelMark channel={channel} /></span>
+      <span className="mosaic-details"><b>{channel.name} · {channelCategory(channel)}</b><strong>{current?.title || 'Sin programa en emisión'}</strong><small>{next ? `Después · ${next.title}` : 'Sin próxima emisión'}</small></span><span className="mosaic-tune">Sintonizar ↗</span>
+    </button>
+  })}</div>
+}
+
+function channelCategory(channel) {
+  const name = channel?.name?.toLowerCase() || ''
+  if (name.includes('music')) return 'Música'
+  if (name.includes('vte1') || name.includes('voltage')) return 'Entretenimiento'
+  return 'Canal VTE'
 }
 
 function ChannelsPage({ media }) {
@@ -120,7 +216,7 @@ function EventsPage({ media }) {
 }
 
 function EventCard({ event, media }) {
-  const status = getEventStatus(event)
+  const status = getEventStatus(event, media.serverNow)
   const isSaved = media.savedVideos.some((item) => item.content_key === `event:${event.id}`)
   const save = async () => { try { await media.toggleSavedVideo({ content_key: `event:${event.id}`, title: event.title, thumbnail_url: '', video_source: event.video_source || '' }) } catch (error) { window.alert(error.message) } }
   return <article className="event-card"><div className="event-visual"><span>VTE</span><Status tone={status === 'live' ? 'live' : status === 'cancelled' ? 'error' : 'violet'}>{status === 'live' ? 'En directo' : status === 'cancelled' ? 'Cancelado' : status === 'finished' ? 'Finalizado' : 'Programado'}</Status></div><div className="event-content"><small>{new Intl.DateTimeFormat('es-ES', { dateStyle: 'long', timeStyle: 'short', timeZone: timezone }).format(new Date(event.starts_at))}</small><h2>{event.title}</h2><p>{event.description || 'Sin descripción adicional.'}</p><div className="card-actions"><Link className="text-link" to="/tv">Ir a televisión →</Link><button className="icon-action" onClick={save} aria-label={isSaved ? 'Quitar de Mi lista' : 'Guardar en Mi lista'}>{isSaved ? '★' : '☆'}</button></div></div></article>
