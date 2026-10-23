@@ -110,6 +110,22 @@ export function useMediaData(user) {
     await refresh()
   }
 
+  const loadYoutubeCatalog = async (handle) => {
+    if (!supabase) throw new Error(configMessage())
+    const { data, error: invokeError } = await supabase.functions.invoke('youtube-catalog', { body: { handle } })
+    if (invokeError) {
+      try {
+        const body = await invokeError.context?.json()
+        if (body?.error) throw new Error(body.error)
+      } catch (error) {
+        if (error instanceof Error && error.message !== invokeError.message) throw error
+      }
+      throw new Error(invokeError.message || 'No se pudo consultar el catálogo de YouTube.')
+    }
+    if (data?.error) throw new Error(data.error)
+    return data
+  }
+
   const toggleSavedVideo = async (item) => {
     if (!user) throw new Error('Inicia sesión para guardar contenido en Mi lista.')
     if (!supabase) throw new Error(configMessage())
@@ -122,5 +138,5 @@ export function useMediaData(user) {
   }
 
   const serverNow = new Date(clockTick + (clockOffset ?? 0))
-  return { channels, programs, events, savedVideos, loading, error, isDemo: !supabaseConfigured, serverNow, serverClockSynced: clockOffset !== null, refresh, saveEntity, deleteEntity, toggleSavedVideo }
+  return { channels, programs, events, savedVideos, loading, error, isDemo: !supabaseConfigured, serverNow, serverClockSynced: clockOffset !== null, refresh, saveEntity, deleteEntity, loadYoutubeCatalog, toggleSavedVideo }
 }

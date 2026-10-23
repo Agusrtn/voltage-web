@@ -255,6 +255,28 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 .admin-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }.admin-metrics button { display: flex; min-width: 0; align-items: center; gap: 11px; padding: 13px 15px; border: 1px solid var(--line); color: #acb7c7; background: #101621; text-align: left; transition: border-color .18s, background .18s; }.admin-metrics button:hover, .admin-metrics button.active { border-color: rgba(74,167,255,.58); color: #f4f8fd; background: #142238; }.admin-metrics b { color: #b5ddff; font-size: 23px; font-weight: 500; letter-spacing: -.06em; }.admin-metrics span { font-size: 11px; font-weight: 600; }
 .entity-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(330px, 420px); align-items: start; gap: 15px; }.admin-list, .admin-form { min-width: 0; padding: 19px; border: 1px solid var(--line); background: #101621; }.admin-list .section-heading { align-items: flex-start; }.admin-list .section-heading h2 { font-size: 19px; }.admin-row { display: flex; min-height: 63px; align-items: center; gap: 11px; padding: 10px 0; border-top: 1px solid var(--line); }.selected-edit .admin-row { margin-inline: -8px; padding-inline: 8px; background: rgba(74,167,255,.08); }.admin-row > div:not(.channel-mark):not(.time-tag) { min-width: 0; flex: 1; }.admin-row strong, .admin-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.admin-row strong { font-size: 11px; font-weight: 600; }.admin-row small { margin-top: 4px; color: #96a1b1; font-size: 9px; }.text-button { padding: 8px; border: 0; color: #8fcaff; background: transparent; font-size: 10px; font-weight: 600; }.text-button:hover { color: #fff; }.time-tag { width: 58px; flex: 0 0 auto; color: #a9d8ff; font: 9px/1.4 var(--mono); }.form-title { margin-bottom: 4px; }.form-title h2 { overflow: hidden; margin: 8px 0 5px; font-size: 18px; font-weight: 500; letter-spacing: -.04em; text-overflow: ellipsis; white-space: nowrap; }.form-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }.check-label { display: flex !important; align-items: center; gap: 9px !important; margin-top: 3px; }.check-label input { width: 16px; min-height: 16px; accent-color: var(--blue); }.form-actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 4px; }
 .loading-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }.loading-grid span { min-height: 128px; border: 1px solid var(--line); background: linear-gradient(100deg, #101722 20%, #1b2939 40%, #101722 60%); background-size: 200% 100%; animation: loading 1.4s ease infinite; }
+.admin-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.youtube-admin { display: grid; gap: 16px; padding: clamp(16px, 2.5vw, 24px); border: 1px solid var(--line); background: #101621; }
+.youtube-admin-intro h2 { margin: 8px 0 5px; font-size: 21px; font-weight: 500; letter-spacing: -.04em; }
+.youtube-admin-intro p { max-width: 680px; margin: 0; color: #a0abba; font-size: 11px; line-height: 1.65; }
+.youtube-catalog-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px; padding: 14px; border: 1px solid var(--line); background: #0c131d; }
+.youtube-catalog-toolbar label, .catalog-search { display: grid; gap: 7px; color: #d3dbe6; font-size: 10px; font-weight: 600; }
+.youtube-catalog-toolbar .button { min-width: 145px; }
+.catalog-search { max-width: 440px; }
+.youtube-video-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.youtube-video-option { min-width: 0; overflow: hidden; padding: 0; border: 1px solid var(--line); background: #0c131d; text-align: left; transition: border-color .18s, transform .18s; }
+.youtube-video-option:hover { transform: translateY(-2px); border-color: rgba(74,167,255,.55); }
+.youtube-video-option.selected { border-color: var(--blue-bright); box-shadow: 0 0 0 1px var(--blue-bright); }
+.youtube-video-thumb { position: relative; display: block; aspect-ratio: 16 / 9; overflow: hidden; background: linear-gradient(140deg, #19314c, #101722); }
+.youtube-video-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.youtube-video-thumb > span { position: absolute; right: 7px; bottom: 7px; padding: 5px 6px; color: #fff; background: rgba(4,8,13,.84); font: 8px var(--mono); }
+.youtube-video-copy { display: grid; gap: 7px; padding: 11px; }
+.youtube-video-copy b { display: -webkit-box; overflow: hidden; min-height: 34px; font-size: 10px; font-weight: 600; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.youtube-video-copy small { color: #96a3b4; font-size: 9px; }
+.catalog-empty { padding: 28px 16px; border: 1px dashed var(--line-strong); color: #9ca8b8; font-size: 11px; line-height: 1.6; text-align: center; }
+.youtube-schedule-form { display: grid; max-width: 700px; gap: 14px; padding: 17px; border: 1px solid rgba(74,167,255,.32); background: #0c1521; }
+.youtube-schedule-form .form-title h2 { overflow: visible; white-space: normal; line-height: 1.45; }
+.youtube-schedule-form .button { justify-self: start; }
 
 @keyframes rise-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes loading { to { background-position: -200% 0; } }
@@ -298,6 +320,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
   .epg-page-tools { width: 100%; margin: 0 0 20px; }
   .tv-console { grid-template-columns: 1fr; }
   .tv-side-panel { min-height: 400px; max-height: 540px; }
+  .youtube-video-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 520px) {
   .player { min-height: 0; aspect-ratio: 16 / 9; }
@@ -310,6 +333,10 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
   .tv-now-playing { padding: 14px; }
   .mosaic-grid { grid-template-columns: 1fr; }
   .mosaic-tile { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .admin-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .youtube-catalog-toolbar { grid-template-columns: 1fr; }
+  .youtube-catalog-toolbar .button { width: 100%; }
+  .youtube-video-grid { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }

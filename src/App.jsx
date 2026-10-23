@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from './hooks/useAuth'
 import { useMediaData } from './hooks/useMediaData'
 import { configMessage } from './lib/supabase'
-import { getChannelSchedule, getEventStatus, formatDateTime } from './lib/schedule'
+import { getChannelSchedule, getEventStatus, formatDateTime, hasScheduleConflict } from './lib/schedule'
 import { youtubeVideoId } from './lib/media'
 import { adminAccessState } from './lib/access'
 import { ChannelMark, EmptyState, LoadingGrid, Notice, Status } from './components/ui'
@@ -266,8 +266,99 @@ function AdminGate({ auth, media }) {
 
 function AdminPage({ media }) {
   const [section, setSection] = useState('channels')
-  const totals = { channels: media.channels.length, programs: media.programs.length, events: media.events.length }
-  return <div className="page admin-page"><PageIntro eyebrow="OPERACIONES" title="Administración" detail="Los cambios se validan en el navegador y vuelven a comprobarse por PostgreSQL y RLS." /><div className="admin-metrics">{Object.entries(totals).map(([key, value]) => <button className={section === key ? 'active' : ''} key={key} onClick={() => setSection(key)}><b>{value}</b><span>{key === 'channels' ? 'Canales' : key === 'programs' ? 'Programas' : 'Eventos'}</span></button>)}</div>{media.error && <Notice tone="error">{media.error}</Notice>}{section === 'channels' && <ChannelAdmin media={media} />}{section === 'programs' && <ProgramAdmin media={media} />}{section === 'events' && <EventAdmin media={media} />}</div>
+  const sections = [
+    { key: 'channels', count: media.channels.length, label: 'Canales' },
+    { key: 'youtube', count: 'YT', label: 'Catálogo YouTube' },
+    { key: 'programs', count: media.programs.length, label: 'Programas' },
+    { key: 'events', count: media.events.length, label: 'Eventos' },
+  ]
+  return <div className="page admin-page"><PageIntro eyebrow="OPERACIONES" title="Administración" detail="Control de señales, catálogo, programación y eventos. Los cambios se guardan en Supabase y se validan mediante RLS." /><div className="admin-metrics">{sections.map(({ key, count, label }) => <button className={section === key ? 'active' : ''} key={key} onClick={() => setSection(key)}><b>{count}</b><span>{label}</span></button>)}</div>{media.error && <Notice tone="error">{media.error}</Notice>}{section === 'channels' && <ChannelAdmin media={media} />}{section === 'youtube' && <YoutubeCatalogAdmin media={media} />}{section === 'programs' && <ProgramAdmin media={media} />}{section === 'events' && <EventAdmin media={media} />}</div>
+}
+
+function YoutubeCatalogAdmin({ media }) {
+  const sources = media.channels.flatMap((channel) => (channel.youtube_channels || []).map((source) => ({
+    ...source,
+    channelId: channel.id,
+    channelName: channel.name,
+    handle: source.url.match(/youtube\.com\/@([^/?#]+)/i)?.[1] || '',
+  }))).filter((source) => source.handle)
+  const [sourceIndex, setSourceIndex] = useState('0')
+  const [search, setSearch] = useState('')
+  const [videos, setVideos] = useState([])
+  const [selectedVideo, setSelectedVideo] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+  const [notice, setNotice] = useState(null)
+  const [startsAt, setStartsAt] = useState(() => toEditInput(media.serverNow))
+  const [endsAt, setEndsAt] = useState(() => toEditInput(new Date(media.serverNow.getTime() + 60 * 60 * 1000)))
+  const source = sources[Number(sourceIndex)]
+  const visibleVideos = videos.filter((video) => `${video.title} ${video.description}`.toLowerCase().includes(search.trim().toLowerCase()))
+
+  const loadCatalog = async () => {
+    if (!source) return
+    setLoading(true); setError(null); setNotice(null); setSelectedVideo(null)
+    try {
+      const result = await media.loadYoutubeCatalog(source.handle)
+      setVideos(result.videos || [])
+      setNotice(`${result.videos?.length || 0} vídeos públicos cargados de ${result.channel?.title || source.label}.`)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const scheduleVideo = async (event) => {
+    event.preventDefault()
+    if (!source || !selectedVideo) return
+    setSaving(true); setError(null); setNotice(null)
+    try {
+      const start = new Date(startsAt)
+      const end = new Date(endsAt)
+      if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) throw new Error('El horario de fin debe ser posterior al inicio.')
+      const program = {
+        channel_id: source.channelId,
+        title: selectedVideo.title.slice(0, 140),
+        description: selectedVideo.description.slice(0, 1000),
+        video_source: selectedVideo.videoSource,
+        starts_at: start.toISOString(),
+        ends_at: end.toISOString(),
+      }
+      if (hasScheduleConflict(program, media.programs)) throw new Error('Ese horario se solapa con otro programa del canal.')
+      await media.saveEntity('programs', program)
+      setNotice(`“${program.title}” se añadió a la programación de ${source.channelName}.`)
+      setSelectedVideo(null)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return <section className="youtube-admin">
+    <div className="youtube-admin-intro"><div><span className="eyebrow">YOUTUBE DATA API · CATALOGO</span><h2>Elige vídeos para emitir</h2><p>Consulta las subidas públicas de los canales VTE y añádelas al horario del canal correspondiente. Las claves permanecen en los secretos de Supabase.</p></div></div>
+    {!sources.length ? <Notice>Primero crea VTE1 y VTE MUSIC o configura sus enlaces de YouTube.</Notice> : <>
+      <div className="youtube-catalog-toolbar"><label>Canal de YouTube<select value={sourceIndex} onChange={(event) => { setSourceIndex(event.target.value); setVideos([]); setSelectedVideo(null); setNotice(null); setError(null) }}>{sources.map((item, index) => <option key={`${item.handle}-${item.channelId}`} value={index}>{item.channelName} · {item.label}</option>)}</select></label><button className="button primary" type="button" onClick={loadCatalog} disabled={loading}>{loading ? 'Cargando vídeos…' : 'Cargar vídeos'}</button></div>
+      {error && <Notice tone="error">{error}</Notice>}{notice && <Notice tone="success">{notice}</Notice>}
+      {videos.length > 0 && <label className="catalog-search">Buscar en los vídeos cargados<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Título del vídeo" /></label>}
+      {videos.length > 0 && <div className="youtube-video-grid">{visibleVideos.map((video) => <button type="button" key={video.videoId} className={`youtube-video-option ${selectedVideo?.videoId === video.videoId ? 'selected' : ''}`} onClick={() => setSelectedVideo(video)} aria-pressed={selectedVideo?.videoId === video.videoId}>
+        <span className="youtube-video-thumb">{video.thumbnailUrl && <img src={video.thumbnailUrl} alt="" loading="lazy" />}<span>{video.liveBroadcastContent === 'live' ? 'EN DIRECTO' : video.duration ? formatYoutubeDuration(video.duration) : 'YOUTUBE'}</span></span><span className="youtube-video-copy"><b>{video.title}</b><small>{video.publishedAt ? formatDateTime(video.publishedAt, timezone, true) : 'Fecha no disponible'}</small></span>
+      </button>)}</div>}
+      {videos.length > 0 && visibleVideos.length === 0 && <div className="catalog-empty">No hay vídeos que coincidan con la búsqueda.</div>}
+      {videos.length === 0 && !loading && !error && <div className="catalog-empty">Selecciona un canal y pulsa “Cargar vídeos” para consultar sus subidas públicas.</div>}
+      {selectedVideo && <form className="youtube-schedule-form" onSubmit={scheduleVideo}><div className="form-title"><span className="eyebrow">PROGRAMAR EN {source.channelName.toUpperCase()}</span><h2>{selectedVideo.title}</h2></div><div className="form-pair"><label>Inicio<input required type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} /></label><label>Fin<input required type="datetime-local" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} /></label></div><button className="button primary" disabled={saving}>{saving ? 'Guardando…' : 'Añadir a programas'}</button></form>}
+    </>}
+  </section>
+}
+
+function formatYoutubeDuration(duration) {
+  const match = duration.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/)
+  if (!match) return 'YOUTUBE'
+  const hours = Number(match[1] || 0)
+  const minutes = Number(match[2] || 0)
+  const seconds = Number(match[3] || 0)
+  return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}` : `${minutes}:${String(seconds).padStart(2, '0')}`
 }
 
 function ChannelAdmin({ media }) {

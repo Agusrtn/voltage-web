@@ -117,6 +117,20 @@ Los programas de vídeo bajo demanda comienzan en el punto correspondiente a su 
 
 La aplicación no requiere YouTube Data API para operar. Si se decide añadirla para comprobar estado o metadatos, debe ejecutarse detrás de un servicio seguro o con una clave con restricciones de referrer y cuota; no expongas una clave privada en el bundle.
 
+## Catálogo de YouTube en Administración
+
+La Edge Function [`supabase/functions/youtube-catalog/index.ts`](supabase/functions/youtube-catalog/index.ts) consulta hasta 50 vídeos públicos recientes de los cuatro canales autorizados para VOLTAGE. Comprueba la sesión Supabase y el rol `admin` antes de usar YouTube Data API; la clave nunca llega al navegador. En Administración → **Catálogo YouTube**, se puede elegir un vídeo y guardarlo como programa con inicio/fin en la tabla existente `programs`.
+
+Para activar el catálogo en Supabase:
+
+1. En Google Cloud, revoca cualquier API key que se haya publicado en un chat, crea una nueva, habilita **YouTube Data API v3** y restringe la clave a esa API.
+2. En la raíz del proyecto, enlaza Supabase CLI con el proyecto correcto si todavía no está enlazado: `supabase link --project-ref TU_PROJECT_REF`.
+3. Guarda la clave nueva como secreto, sin incluirla en `.env`, el frontend ni Git: `supabase secrets set YOUTUBE_API_KEY=TU_CLAVE_NUEVA`.
+4. Despliega la función: `supabase functions deploy youtube-catalog`.
+5. Verifica que JWT esté habilitado para la función (es el valor predeterminado). Solo las cuentas con rol admin pueden obtener el catálogo; la función además limita las consultas a los cuatro handles VTE autorizados.
+
+Si la clave ya se guardó con otro nombre, vuelve a registrarla exactamente como `YOUTUBE_API_KEY`. No compartas la clave aquí ni la pongas en una variable `VITE_*`.
+
 ## Despliegue en Vercel
 
 1. Sube este proyecto a un repositorio GitHub sin `.env`, `node_modules` ni archivos de compilación.
