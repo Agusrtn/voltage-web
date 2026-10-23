@@ -16,8 +16,8 @@ function Header({ auth }) {
   const close = () => setOpen(false)
   return <header className="site-header">
     <Link className="brand" to="/" onClick={close}><span className="brand-wordmark">VOLTAGE<span>®</span></span></Link>
-    <button className="menu-button" aria-label="Abrir navegación" aria-expanded={open} onClick={() => setOpen(!open)}>☰</button>
-    <nav className={open ? 'open' : ''} aria-label="Navegación principal">
+    <button className="menu-button" aria-label={open ? 'Cerrar navegación' : 'Abrir navegación'} aria-expanded={open} aria-controls="primary-navigation" onClick={() => setOpen(!open)}><span /><span /><span /></button>
+    <nav id="primary-navigation" className={`site-nav ${open ? 'open' : ''}`} aria-label="Navegación principal">
       <NavLink to="/tv" onClick={close}>Televisión</NavLink>
       <NavLink to="/guia" onClick={close}>Guía TV</NavLink>
       <NavLink to="/canales" onClick={close}>Canales</NavLink>
