@@ -108,7 +108,9 @@ Un evento vivo tiene prioridad visual y de fuente sobre el programa regular de s
 
 Los programas de vídeo bajo demanda comienzan en el punto correspondiente a su hora de inicio y el reproductor corrige desfases periódicamente. Una emisión real de YouTube (`/live/`) reproduce desde el directo sin aplicar ese desplazamiento. YouTube controla la disponibilidad de inserción, autoplay, calidad y búsqueda; no se puede prometer sincronía al fotograma ni quitar su marca.
 
-Cuando no hay una fuente de vídeo efectiva (ni evento, ni programa en emisión, ni vídeo predeterminado del canal), VTE1 reproduce en bucle el archivo local `voltagevd1.webm` y VTE MUSIC `voltagevd2.webm`. Arrancan silenciados para cumplir las reglas de autoplay del navegador; el espectador puede activar el sonido. Al entrar en un programa o evento con fuente configurada, esa fuente tiene prioridad sobre el bucle. Los archivos se importan como assets de Vite y se incluyen en el build de producción.
+Los canales se consultan por sus UUID de Supabase; la lista vacía no es normal en producción si la tabla de canales está configurada correctamente. Los canales VTE1 y VTE MUSIC también tienen una configuración local por nombre para su identidad y fallback, así que una tabla remota vacía puede usar los dos canales VTE del modo de muestra.
+
+Cuando no hay una fuente de vídeo efectiva (ni evento, ni vídeo de programa en emisión, ni vídeo predeterminado del canal), VTE1 reproduce en bucle el archivo local `voltagevd1.webm` y VTE MUSIC `voltagevd2.webm`. Arrancan silenciados para cumplir las reglas de autoplay del navegador; el espectador puede activar el sonido. Se leen sus dimensiones reales al cargar los metadatos y se conserva su proporción sin recortar. El reproductor genera bloques virtuales diarios de continuidad alrededor de programas guardados; no inserta filas artificiales en Supabase. Al entrar en un programa/evento con fuente configurada, esa fuente tiene prioridad. Los archivos se importan como assets de Vite y se incluyen en el build de producción.
 
 ## Fuentes de vídeo
 

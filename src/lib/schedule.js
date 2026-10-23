@@ -24,6 +24,54 @@ export function getChannelSchedule(channelId, programs, now = new Date()) {
   return { current, next, schedule }
 }
 
+export function buildBroadcastSchedule(channels, programs, now = new Date(), daysBefore = 2, daysAfter = 14) {
+  const from = new Date(now)
+  from.setUTCHours(0, 0, 0, 0)
+  from.setUTCDate(from.getUTCDate() - daysBefore)
+  const until = new Date(now)
+  until.setUTCHours(0, 0, 0, 0)
+  until.setUTCDate(until.getUTCDate() + daysAfter + 1)
+
+  const continuityPrograms = []
+  for (const channel of channels) {
+    if (!channel.fallback_video_source) continue
+    const channelPrograms = programs
+      .filter((program) => program.channel_id === channel.id)
+      .map((program) => ({ start: new Date(program.starts_at).getTime(), end: new Date(program.ends_at).getTime() }))
+      .filter((program) => Number.isFinite(program.start) && Number.isFinite(program.end) && program.end > from.getTime() && program.start < until.getTime())
+      .sort((a, b) => a.start - b.start)
+
+    for (let dayStart = from.getTime(); dayStart < until.getTime(); dayStart += 86400000) {
+      const dayEnd = dayStart + 86400000
+      const dayPrograms = channelPrograms.filter((program) => program.start < dayEnd && program.end > dayStart)
+      let cursor = dayStart
+      const addContinuity = (start, end) => {
+        if (end <= start) return
+        continuityPrograms.push({
+          id: `continuity:${channel.id}:${start}`,
+          channel_id: channel.id,
+          title: `Emisión continua · ${channel.name}`,
+          description: 'Señal de continuidad en bucle entre programas.',
+          video_source: channel.fallback_video_source,
+          starts_at: new Date(start).toISOString(),
+          ends_at: new Date(end).toISOString(),
+          is_fallback: true,
+        })
+      }
+
+      for (const program of dayPrograms) {
+        const programStart = Math.max(dayStart, program.start)
+        const programEnd = Math.min(dayEnd, program.end)
+        if (programStart > cursor) addContinuity(cursor, programStart)
+        cursor = Math.max(cursor, programEnd)
+      }
+      if (cursor < dayEnd) addContinuity(cursor, dayEnd)
+    }
+  }
+
+  return [...programs, ...continuityPrograms].sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at))
+}
+
 export function getEventStatus(event, now = new Date()) {
   if (event.status === 'cancelled') return 'cancelled'
   const current = new Date(now).getTime()

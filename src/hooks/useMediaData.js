@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { defaultLoopFallbacks, defaultYoutubeChannels, demoChannels, demoEvents, demoPrograms } from '../data/demoContent'
 import { configMessage, supabase, supabaseConfigured } from '../lib/supabase'
 import { favoriteTransition } from '../lib/favorites'
+import { buildBroadcastSchedule } from '../lib/schedule'
 
 const tableColumns = {
   channels: 'id, name, description, logo_url, video_source, is_active, display_order, created_at, updated_at',
@@ -57,7 +58,8 @@ export function useMediaData(user) {
     if (firstError) {
       setError(`No se ha podido cargar el contenido: ${firstError.message}`)
     } else {
-      setChannels(addYoutubeChannelLinks(channelsResult.data)); setPrograms(programsResult.data); setEvents(eventsResult.data); setSavedVideos(savesResult.data)
+      const remoteChannels = channelsResult.data?.length ? channelsResult.data : demoChannels
+      setChannels(addYoutubeChannelLinks(remoteChannels)); setPrograms(programsResult.data); setEvents(eventsResult.data); setSavedVideos(savesResult.data)
       setError(null)
     }
     setLoading(false)
@@ -140,5 +142,10 @@ export function useMediaData(user) {
   }
 
   const serverNow = new Date(clockTick + (clockOffset ?? 0))
-  return { channels, programs, events, savedVideos, loading, error, isDemo: !supabaseConfigured, serverNow, serverClockSynced: clockOffset !== null, refresh, saveEntity, deleteEntity, loadYoutubeCatalog, toggleSavedVideo }
+  const serverDay = Math.floor(serverNow.getTime() / 86400000)
+  const broadcastPrograms = useMemo(
+    () => buildBroadcastSchedule(channels, programs, new Date(serverDay * 86400000)),
+    [channels, programs, serverDay],
+  )
+  return { channels, programs, broadcastPrograms, events, savedVideos, loading, error, isDemo: !supabaseConfigured, serverNow, serverClockSynced: clockOffset !== null, refresh, saveEntity, deleteEntity, loadYoutubeCatalog, toggleSavedVideo }
 }

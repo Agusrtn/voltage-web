@@ -107,7 +107,7 @@ function YoutubeBroadcast({ videoId, title, syncStartAt, serverClockOffsetMs, li
   </>
 }
 
-function LocalLoopBroadcast({ source, title, liveLabel, onError }) {
+function LocalLoopBroadcast({ source, title, liveLabel, onError, onDimensions }) {
   const videoRef = useRef(null)
   const onErrorRef = useRef(onError)
   const [muted, setMuted] = useState(true)
@@ -134,6 +134,10 @@ function LocalLoopBroadcast({ source, title, liveLabel, onError }) {
       playsInline
       preload="auto"
       aria-label={`${title}, señal continua`}
+      onLoadedMetadata={(event) => {
+        const { videoWidth, videoHeight } = event.currentTarget
+        if (videoWidth && videoHeight) onDimensions?.(videoWidth, videoHeight)
+      }}
       onError={(event) => { setFailed(true); onErrorRef.current?.(event) }}
     />
     {failed && <div className="loop-fallback-error" role="status"><strong>No se pudo cargar la señal continua</strong><span>Comprueba que el archivo WEBM está incluido en el despliegue.</span></div>}
@@ -146,6 +150,7 @@ function LocalLoopBroadcast({ source, title, liveLabel, onError }) {
 
 export function VideoPlayer({ channel, programs = [], activeEvent, timezone, onPlayError, serverNow = new Date(), serverClockSynced = false, channelNumber }) {
   const [fullscreen, setFullscreen] = useState(false)
+  const [videoAspectRatio, setVideoAspectRatio] = useState(null)
   const playerAreaRef = useRef(null)
   const clockOffsetMs = serverNow.getTime() - Date.now()
   useEffect(() => {
@@ -157,7 +162,9 @@ export function VideoPlayer({ channel, programs = [], activeEvent, timezone, onP
   const eventStatus = activeEvent ? getEventStatus(activeEvent) : null
   const source = activeEvent?.video_source || current?.video_source || channel?.video_source || ''
   const videoId = youtubeVideoId(source)
-  const fallbackVideoSource = !source ? channel?.fallback_video_source : null
+  const fallbackVideoSource = channel?.fallback_video_source && (!source || source === channel.fallback_video_source)
+    ? channel.fallback_video_source
+    : null
   const scheduledVideo = current && source === current.video_source && !isYoutubeLiveSource(source)
   const syncStartAt = scheduledVideo ? current.starts_at : null
   const isMp4 = /\.(mp4)(\?.*)?$/i.test(source || '')
@@ -173,11 +180,11 @@ export function VideoPlayer({ channel, programs = [], activeEvent, timezone, onP
 
   if (!channel) return <div className="player empty-player"><span>Selecciona un canal para empezar</span></div>
   return <section className="player-shell">
-    <div className="player" ref={playerAreaRef}>
+    <div className="player" ref={playerAreaRef} style={videoAspectRatio ? { aspectRatio: videoAspectRatio } : undefined}>
       {videoId ? (
         <YoutubeBroadcast key={`${videoId}:${syncStartAt || 'live'}`} videoId={videoId} title={channel.name} syncStartAt={syncStartAt} serverClockOffsetMs={clockOffsetMs} liveLabel={liveLabel} onError={onPlayError} />
       ) : fallbackVideoSource ? (
-        <LocalLoopBroadcast key={fallbackVideoSource} source={fallbackVideoSource} title={channel.name} liveLabel={liveLabel} onError={onPlayError} />
+        <LocalLoopBroadcast key={fallbackVideoSource} source={fallbackVideoSource} title={channel.name} liveLabel={liveLabel} onError={onPlayError} onDimensions={(width, height) => setVideoAspectRatio(`${width} / ${height}`)} />
       ) : source && isMp4 ? (
         <video controls src={source} onError={onPlayError}>Tu navegador no puede reproducir esta fuente.</video>
       ) : (
