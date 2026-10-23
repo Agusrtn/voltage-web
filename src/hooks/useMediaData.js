@@ -93,9 +93,11 @@ export function useMediaData(user) {
 
   const saveEntity = async (table, entity) => {
     if (!supabase) throw new Error(configMessage())
-    const query = entity.id
-      ? supabase.from(table).update(entity).eq('id', entity.id).select(tableColumns[table]).single()
-      : supabase.from(table).insert(entity).select(tableColumns[table]).single()
+    const persistedEntity = { ...entity }
+    delete persistedEntity.youtube_channels
+    const query = persistedEntity.id
+      ? supabase.from(table).update(persistedEntity).eq('id', persistedEntity.id).select(tableColumns[table]).single()
+      : supabase.from(table).insert(persistedEntity).select(tableColumns[table]).single()
     const { error: writeError } = await query
     if (writeError) throw writeError
     await refresh()
