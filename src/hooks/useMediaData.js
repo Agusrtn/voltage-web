@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { defaultYoutubeChannels, demoChannels, demoEvents, demoPrograms } from '../data/demoContent'
+import { defaultLoopFallbacks, defaultYoutubeChannels, demoChannels, demoEvents, demoPrograms } from '../data/demoContent'
 import { configMessage, supabase, supabaseConfigured } from '../lib/supabase'
 import { favoriteTransition } from '../lib/favorites'
 
@@ -14,6 +14,7 @@ function addYoutubeChannelLinks(channels) {
   return channels.map((channel) => ({
     ...channel,
     youtube_channels: defaultYoutubeChannels[channel.name] || channel.youtube_channels || [],
+    youtube_fallback_user: defaultLoopFallbacks[channel.name] || channel.youtube_fallback_user || null,
   }))
 }
 

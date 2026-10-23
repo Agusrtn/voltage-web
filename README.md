@@ -108,6 +108,8 @@ Un evento vivo tiene prioridad visual y de fuente sobre el programa regular de s
 
 Los programas de vídeo bajo demanda comienzan en el punto correspondiente a su hora de inicio y el reproductor corrige desfases periódicamente. Una emisión real de YouTube (`/live/`) reproduce desde el directo sin aplicar ese desplazamiento. YouTube controla la disponibilidad de inserción, autoplay, calidad y búsqueda; no se puede prometer sincronía al fotograma ni quitar su marca.
 
+Cuando no hay una fuente de vídeo efectiva (ni evento, ni programa en emisión, ni vídeo predeterminado del canal), VTE1 usa la lista de subidas YouTube `voltagevd1` y VTE MUSIC usa `voltagevd2`. El reproductor la reproduce en silencio y solicita repetir la playlist con el parámetro oficial `loop=1`. Al entrar en un programa/evento con fuente configurada, la fuente programada tiene prioridad sobre el bucle. YouTube puede limitar autoplay, insertar contenido o compatibilidad del reproductor; el bucle depende de que esos nombres de cuenta correspondan a usernames públicos que YouTube acepte para `listType=user_uploads`.
+
 ## Fuentes de vídeo
 
 - YouTube: introduce una URL de vídeo (`youtube.com/watch?v=...` o `youtu.be/...`) que haya sido comprobada por su propietario para inserción. La app usa el iframe oficial de privacidad mejorada.
