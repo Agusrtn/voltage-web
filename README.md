@@ -63,8 +63,9 @@ Sin variables válidas, la aplicación inicia en modo de muestra: las tarjetas n
    ```
 
 4. Ejecuta también [`supabase/migrations/002_broadcast_server_clock.sql`](supabase/migrations/002_broadcast_server_clock.sql). Expone solo la hora oficial de PostgreSQL para alinear estados de guía y offsets de reproducción; no lee ni modifica tablas.
-5. Comprueba en **Database > Policies** que RLS esté activado para las seis tablas y que las políticas se hayan creado.
-6. Añade las variables reales al archivo `.env` y reinicia Vite.
+5. Ejecuta [`supabase/migrations/003_program_video_storage.sql`](supabase/migrations/003_program_video_storage.sql) para crear el bucket público de reproducción y restringir subidas/cambios/borrados al rol admin.
+6. Comprueba en **Database > Policies** que RLS esté activado para las seis tablas y que las políticas se hayan creado.
+7. Añade las variables reales al archivo `.env` y reinicia Vite.
 
 ### Seguridad implementada
 
@@ -101,8 +102,9 @@ Tras obtener el rol admin:
 
 1. Para cargar los canales iniciales **VTE1** y **VTE MUSIC**, ejecuta una vez [`supabase/manual/seed_default_channels.sql`](supabase/manual/seed_default_channels.sql) en el SQL Editor. Si Supabase no está configurado, ambos aparecen igualmente en el modo de muestra. Los enlaces a los canales de YouTube se ofrecen como accesos externos.
 2. En **Administración > Canales**, crea el canal, orden, logotipo HTTPS, descripción y fuente. Marca *disponible públicamente* solo cuando deba publicarse.
-3. En **Programas**, selecciona un canal y define inicio/fin. Pega la URL compartible de un vídeo o directo de YouTube (o MP4 HTTPS) en la fuente opcional. El reproductor inserta vídeos concretos; una página de canal como `youtube.com/@voltagerbx` no es una fuente de vídeo insertable. El formulario y PostgreSQL rechazan solapes dentro de ese canal. Los valores se convierten a UTC; se muestran con `VITE_APP_TIMEZONE`.
-4. En **Eventos**, añade el intervalo y, opcionalmente, un canal asociado. `scheduled` se vuelve “En directo” únicamente cuando la hora actual está dentro de su intervalo; `cancelled` nunca se reproduce. Para evitar interrupciones simultáneas de un mismo canal, los eventos asociados con fecha de fin no pueden solaparse en PostgreSQL.
+3. En **Programas**, selecciona un canal y define inicio/fin. Puedes pegar un enlace de vídeo/directo de YouTube o MP4 HTTPS, o subir un archivo MP4/WEBM de hasta 250 MB. Para subidas, ejecuta primero la migración 003. El reproductor detecta la duración del archivo y sincroniza su posición según el inicio programado. El formulario y PostgreSQL rechazan solapes dentro del canal.
+4. El botón **Autoprogramar todos los canales** del área Programas consulta los canales de YouTube enlazados a cada canal VTE, usa duración publicada por YouTube y crea una cola a partir del siguiente intervalo libre. Omite directos sin duración y vídeos que ya estén programados. Requiere que la Edge Function `youtube-catalog` esté desplegada y `YOUTUBE_API_KEY` configurada.
+5. En **Eventos**, añade el intervalo y, opcionalmente, un canal asociado. `scheduled` se vuelve “En directo” únicamente cuando la hora actual está dentro de su intervalo; `cancelled` nunca se reproduce. Para evitar interrupciones simultáneas de un mismo canal, los eventos asociados con fecha de fin no pueden solaparse en PostgreSQL.
 
 Un evento vivo tiene prioridad visual y de fuente sobre el programa regular de su canal. Al terminar, el reproductor vuelve al programa actual. La sección **Televisión** incluye sintonizador numerado, EPG con búsqueda y salto de 12 horas, progreso del programa y una vista mosaico de miniaturas (sin abrir muchos reproductores simultáneos). La guía y los estados consultan la hora oficial de PostgreSQL; si falta la migración 002 o no hay conexión, la interfaz usa el reloj local. Los horarios no se reinician al navegar: se evalúan contra marcas de tiempo absolutas.
 

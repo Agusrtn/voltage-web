@@ -99,12 +99,40 @@ export function useMediaData(user) {
     const persistedEntity = { ...entity }
     delete persistedEntity.youtube_channels
     delete persistedEntity.fallback_video_source
+    delete persistedEntity.upload_file
     const query = persistedEntity.id
       ? supabase.from(table).update(persistedEntity).eq('id', persistedEntity.id).select(tableColumns[table]).single()
       : supabase.from(table).insert(persistedEntity).select(tableColumns[table]).single()
     const { error: writeError } = await query
     if (writeError) throw writeError
     await refresh()
+  }
+
+  const savePrograms = async (programRows) => {
+    if (!supabase) throw new Error(configMessage())
+    if (!Array.isArray(programRows) || programRows.length === 0) return
+    const { error: writeError } = await supabase.from('programs').insert(programRows)
+    if (writeError) throw writeError
+    await refresh()
+  }
+
+  const uploadProgramVideo = async (file) => {
+    if (!supabase) throw new Error(configMessage())
+    if (!(file instanceof File)) throw new Error('Selecciona un archivo de vídeo.')
+    const extension = file.name.toLowerCase().match(/\.(mp4|webm)$/)?.[1]
+    if (!extension || file.size === 0 || file.size > 250 * 1024 * 1024) {
+      throw new Error('Selecciona un vídeo MP4 o WEBM de hasta 250 MB.')
+    }
+    const contentType = extension === 'mp4' ? 'video/mp4' : 'video/webm'
+    const objectPath = `programs/${crypto.randomUUID()}.${extension}`
+    const { error: uploadError } = await supabase.storage.from('vte-program-videos').upload(objectPath, file, {
+      cacheControl: '31536000',
+      contentType,
+      upsert: false,
+    })
+    if (uploadError) throw uploadError
+    const { data } = supabase.storage.from('vte-program-videos').getPublicUrl(objectPath)
+    return data.publicUrl
   }
 
   const deleteEntity = async (table, id) => {
@@ -147,5 +175,5 @@ export function useMediaData(user) {
     () => buildBroadcastSchedule(channels, programs, new Date(serverDay * 86400000)),
     [channels, programs, serverDay],
   )
-  return { channels, programs, broadcastPrograms, events, savedVideos, loading, error, isDemo: !supabaseConfigured, serverNow, serverClockSynced: clockOffset !== null, refresh, saveEntity, deleteEntity, loadYoutubeCatalog, toggleSavedVideo }
+  return { channels, programs, broadcastPrograms, events, savedVideos, loading, error, isDemo: !supabaseConfigured, serverNow, serverClockSynced: clockOffset !== null, refresh, saveEntity, deleteEntity, loadYoutubeCatalog, uploadProgramVideo, savePrograms, toggleSavedVideo }
 }

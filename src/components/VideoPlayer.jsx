@@ -114,6 +114,54 @@ function LocalLoopBroadcast({ source, title, liveLabel, onError, onDimensions })
   const [failed, setFailed] = useState(false)
   onErrorRef.current = onError
 
+function LocalScheduledVideo({ source, title, syncStartAt, serverClockOffsetMs, liveLabel, onError, onDimensions }) {
+  const videoRef = useRef(null)
+  const [muted, setMuted] = useState(true)
+  const offsetRef = useRef(serverClockOffsetMs)
+  const errorRef = useRef(onError)
+  offsetRef.current = serverClockOffsetMs
+  errorRef.current = onError
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return undefined
+    let syncTimer
+    const synchronize = () => {
+      if (!video.duration || !Number.isFinite(video.duration)) return
+      const elapsed = Math.max(0, (Date.now() + offsetRef.current - new Date(syncStartAt).getTime()) / 1000)
+      const expectedTime = elapsed % video.duration
+      if (Math.abs(video.currentTime - expectedTime) > 2) video.currentTime = expectedTime
+      video.play().catch(() => {})
+    }
+    video.muted = muted
+    video.addEventListener('loadedmetadata', synchronize)
+    syncTimer = window.setInterval(synchronize, 15000)
+    synchronize()
+    return () => {
+      window.clearInterval(syncTimer)
+      video.removeEventListener('loadedmetadata', synchronize)
+    }
+  }, [muted, source, syncStartAt])
+
+  return <>
+    <video
+      ref={videoRef}
+      className="local-loop-video"
+      src={source}
+      autoPlay
+      loop
+      muted={muted}
+      playsInline
+      preload="auto"
+      aria-label={`${title}, programa sincronizado`}
+      onLoadedMetadata={(event) => onDimensions?.(event.currentTarget.videoWidth, event.currentTarget.videoHeight)}
+      onError={(event) => errorRef.current?.(event)}
+    />
+    <span className="broadcast-live-badge"><i /> {liveLabel}</span>
+    <button className="broadcast-sound" type="button" onClick={() => setMuted((value) => !value)} aria-label={muted ? 'Activar sonido' : 'Silenciar'}>{muted ? 'Activar sonido' : 'Silenciar'}</button>
+  </>
+}
+
   useEffect(() => {
     const video = videoRef.current
     if (!video) return undefined
@@ -165,10 +213,10 @@ export function VideoPlayer({ channel, programs = [], activeEvent, timezone, onP
   const fallbackVideoSource = channel?.fallback_video_source && (!source || source === channel.fallback_video_source)
     ? channel.fallback_video_source
     : null
+  const isLocalVideo = /\.(mp4|webm)(\?.*)?$/i.test(source)
   const scheduledVideo = current && source === current.video_source && !isYoutubeLiveSource(source)
   const syncStartAt = scheduledVideo ? current.starts_at : null
-  const isMp4 = /\.(mp4)(\?.*)?$/i.test(source || '')
-  const canRender = Boolean(videoId || isMp4 || fallbackVideoSource)
+  const canRender = Boolean(videoId || isLocalVideo || fallbackVideoSource)
   const broadcastIsLive = Boolean(eventStatus === 'live' || (current && source === current.video_source) || (channel?.is_active && isYoutubeLiveSource(source)))
   const liveLabel = fallbackVideoSource ? 'EMISIÓN CONTINUA' : broadcastIsLive ? 'EN EMISIÓN' : canRender ? 'FUENTE LISTA' : 'SEÑAL VTE'
   const eventIsLive = activeEvent && eventStatus === 'live'
@@ -183,10 +231,12 @@ export function VideoPlayer({ channel, programs = [], activeEvent, timezone, onP
     <div className="player" ref={playerAreaRef} style={videoAspectRatio ? { aspectRatio: videoAspectRatio } : undefined}>
       {videoId ? (
         <YoutubeBroadcast key={`${videoId}:${syncStartAt || 'live'}`} videoId={videoId} title={channel.name} syncStartAt={syncStartAt} serverClockOffsetMs={clockOffsetMs} liveLabel={liveLabel} onError={onPlayError} />
+      ) : isLocalVideo && syncStartAt ? (
+        <LocalScheduledVideo key={`${source}:${syncStartAt}`} source={source} title={channel.name} syncStartAt={syncStartAt} serverClockOffsetMs={clockOffsetMs} liveLabel={liveLabel} onError={onPlayError} onDimensions={(width, height) => { if (width && height) setVideoAspectRatio(`${width} / ${height}`) }} />
       ) : fallbackVideoSource ? (
         <LocalLoopBroadcast key={fallbackVideoSource} source={fallbackVideoSource} title={channel.name} liveLabel={liveLabel} onError={onPlayError} onDimensions={(width, height) => setVideoAspectRatio(`${width} / ${height}`)} />
-      ) : source && isMp4 ? (
-        <video controls src={source} onError={onPlayError}>Tu navegador no puede reproducir esta fuente.</video>
+      ) : isLocalVideo ? (
+        <LocalLoopBroadcast key={source} source={source} title={channel.name} liveLabel="EMISIÓN CONTINUA" onError={onPlayError} onDimensions={(width, height) => { if (width && height) setVideoAspectRatio(`${width} / ${height}`) }} />
       ) : (
         <div className="player-placeholder">
           <span className="play-symbol">▶</span>

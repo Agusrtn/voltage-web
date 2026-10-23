@@ -1,9 +1,10 @@
+import { getChannelSchedule, getEventStatus, formatDateTime, hasScheduleConflict } from './lib/schedule'
+import { buildAutoProgramPlan } from './lib/autoprogram'
 import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { useAuth } from './hooks/useAuth'
 import { useMediaData } from './hooks/useMediaData'
 import { configMessage } from './lib/supabase'
-import { getChannelSchedule, getEventStatus, formatDateTime, hasScheduleConflict } from './lib/schedule'
 import { youtubeVideoId } from './lib/media'
 import { adminAccessState } from './lib/access'
 import { ChannelMark, EmptyState, LoadingGrid, Notice, Status } from './components/ui'
@@ -361,21 +362,74 @@ function formatYoutubeDuration(duration) {
   return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}` : `${minutes}:${String(seconds).padStart(2, '0')}`
 }
 
+function handleProgramFileSelection(event, change, startsAt) {
+  const file = event.target.files?.[0]
+  change({ target: { name: 'upload_file', value: file || null } })
+  if (!file || !startsAt) return
+
+  const objectUrl = URL.createObjectURL(file)
+  const probe = document.createElement('video')
+  probe.preload = 'metadata'
+  probe.onloadedmetadata = () => {
+    const start = new Date(startsAt).getTime()
+    const duration = probe.duration
+    URL.revokeObjectURL(objectUrl)
+    if (!Number.isFinite(start) || !Number.isFinite(duration) || duration <= 0) return
+    change({ target: { name: 'ends_at', value: toEditInput(new Date(start + duration * 1000)) } })
+  }
+  probe.onerror = () => URL.revokeObjectURL(objectUrl)
+  probe.src = objectUrl
+}
+
 function ChannelAdmin({ media }) {
   const blank = { name: '', description: '', logo_url: '', video_source: '', is_active: true, display_order: media.channels.length + 1 }
   return <EntityWorkspace title="Canales" detail="Las señales públicas necesitan nombre, orden y una fuente compatible si deben reproducirse." entities={media.channels} blank={blank} onSave={(entity) => media.saveEntity('channels', { ...entity, display_order: Number(entity.display_order) })} onDelete={(id) => media.deleteEntity('channels', id)} renderItem={(item, edit) => <div className="admin-row"><ChannelMark channel={item} compact /><div><strong>{item.name}</strong><small>{item.is_active ? 'Activo' : 'Pausado'} · {item.video_source ? 'Fuente configurada' : 'Sin fuente'}</small></div><button className="text-button" onClick={() => edit(item)}>Editar</button></div>} fields={(form, change) => <><label>Nombre<input name="name" required maxLength="80" value={form.name || ''} onChange={change} /></label><label>Descripción<textarea name="description" maxLength="500" value={form.description || ''} onChange={change} /></label><div className="form-pair"><label>URL del logo<input name="logo_url" type="url" value={form.logo_url || ''} onChange={change} /></label><label>Orden<input name="display_order" required type="number" min="0" value={form.display_order ?? ''} onChange={change} /></label></div><label>Fuente de vídeo <small>URL de YouTube, MP4 o HLS según el reproductor disponible.</small><input name="video_source" type="url" value={form.video_source || ''} onChange={change} /></label><label className="check-label"><input type="checkbox" name="is_active" checked={Boolean(form.is_active)} onChange={change} /> Canal disponible públicamente</label></>} />
 }
 
 function ProgramAdmin({ media }) {
+function ProgramAdmin({ media }) {
+  const [autoScheduling, setAutoScheduling] = useState(false)
+  const [autoNotice, setAutoNotice] = useState(null)
+  const [autoError, setAutoError] = useState(null)
   const blank = { channel_id: media.channels[0]?.id || '', title: '', description: '', video_source: '', starts_at: '', ends_at: '' }
   const save = async (entity) => {
     const normalized = { ...entity, starts_at: new Date(entity.starts_at).toISOString(), ends_at: new Date(entity.ends_at).toISOString() }
-    const others = media.programs.filter((item) => item.id !== entity.id)
-    const { hasScheduleConflict } = await import('./lib/schedule')
-    if (hasScheduleConflict(normalized, others)) throw new Error('El intervalo no es válido o se solapa con otro programa del mismo canal.')
+    if (hasScheduleConflict(normalized, media.programs)) throw new Error('El intervalo no es válido o se solapa con otro programa del mismo canal.')
+    normalized.video_source = entity.upload_file ? await media.uploadProgramVideo(entity.upload_file) : entity.video_source || null
+    delete normalized.upload_file
     return media.saveEntity('programs', normalized)
   }
-  return <EntityWorkspace title="Programas" detail="La guía usa intervalos UTC y bloquea los solapes dentro de cada canal." entities={media.programs} blank={blank} onSave={save} onDelete={(id) => media.deleteEntity('programs', id)} renderItem={(item, edit) => <div className="admin-row"><div className="time-tag">{new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: timezone }).format(new Date(item.starts_at))}</div><div><strong>{item.title}</strong><small>{media.channels.find((channel) => channel.id === item.channel_id)?.name || 'Canal eliminado'}</small></div><button className="text-button" onClick={() => edit(item)}>Editar</button></div>} fields={(form, change) => <><label>Canal<select name="channel_id" required value={form.channel_id || ''} onChange={change}><option value="" disabled>Selecciona un canal</option>{media.channels.map((channel) => <option value={channel.id} key={channel.id}>{channel.name}</option>)}</select></label><label>Título<input name="title" required maxLength="140" value={form.title || ''} onChange={change} /></label><label>Descripción<textarea name="description" maxLength="1000" value={form.description || ''} onChange={change} /></label><div className="form-pair"><label>Inicio<input name="starts_at" required type="datetime-local" value={toEditInput(form.starts_at)} onChange={change} /></label><label>Fin<input name="ends_at" required type="datetime-local" value={toEditInput(form.ends_at)} onChange={change} /></label></div><label>Fuente opcional del programa<input name="video_source" type="url" value={form.video_source || ''} onChange={change} /></label></>} />
+  const autoScheduleAll = async () => {
+    setAutoScheduling(true); setAutoError(null); setAutoNotice(null)
+    try {
+      const catalogByChannel = {}
+      let mappedSources = 0
+      for (const channel of media.channels) {
+        const handles = (channel.youtube_channels || []).map((item) => item.url.match(/youtube\.com\/@([^/?#]+)/i)?.[1]).filter(Boolean)
+        if (!handles.length) continue
+        mappedSources += handles.length
+        const results = await Promise.all(handles.map((handle) => media.loadYoutubeCatalog(handle)))
+        catalogByChannel[channel.id] = results.flatMap((result) => result.videos || [])
+      }
+      if (!mappedSources) throw new Error('No hay canales de YouTube vinculados a los canales VTE.')
+      const { programs, skipped } = buildAutoProgramPlan(media.channels, media.programs, catalogByChannel, media.serverNow)
+      if (!programs.length) {
+        setAutoNotice(`No se añadieron programas. ${skipped.length} vídeos sin duración verificable se omitieron.`)
+        return
+      }
+      await media.savePrograms(programs)
+      setAutoNotice(`Programación automática completada: ${programs.length} vídeos añadidos entre ${new Set(programs.map((item) => item.channel_id)).size} canales. ${skipped.length} vídeos sin duración verificable se omitieron.`)
+    } catch (error) {
+      setAutoError(error.message)
+    } finally {
+      setAutoScheduling(false)
+    }
+  }
+  return <>
+    <div className="programs-toolbar"><div><span className="eyebrow">CONTINUIDAD · HORARIOS UTC</span><p>Programa archivos MP4/WEBM propios o vídeos públicos del catálogo. La programación automática respeta los programas existentes.</p></div><button className="button primary" type="button" disabled={autoScheduling || media.isDemo} onClick={autoScheduleAll}>{autoScheduling ? 'Cargando catálogos…' : 'Autoprogramar todos los canales'}</button></div>
+    {autoError && <Notice tone="error">{autoError}</Notice>}{autoNotice && <Notice tone="success">{autoNotice}</Notice>}
+    <EntityWorkspace title="Programas" detail="La guía usa intervalos UTC y bloquea los solapes dentro de cada canal." entities={media.programs} blank={blank} onSave={save} onDelete={(id) => media.deleteEntity('programs', id)} renderItem={(item, edit) => <div className="admin-row"><div className="time-tag">{new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: timezone }).format(new Date(item.starts_at))}</div><div><strong>{item.title}</strong><small>{media.channels.find((channel) => channel.id === item.channel_id)?.name || 'Canal eliminado'} · {item.video_source ? 'Vídeo configurado' : 'Usa señal de continuidad'}</small></div><button className="text-button" onClick={() => edit(item)}>Editar</button></div>} fields={(form, change) => <><label>Canal<select name="channel_id" required value={form.channel_id || ''} onChange={change}><option value="" disabled>Selecciona un canal</option>{media.channels.map((channel) => <option value={channel.id} key={channel.id}>{channel.name}</option>)}</select></label><label>Título<input name="title" required maxLength="140" value={form.title || ''} onChange={change} /></label><label>Descripción<textarea name="description" maxLength="1000" value={form.description || ''} onChange={change} /></label><div className="form-pair"><label>Inicio<input name="starts_at" required type="datetime-local" value={toEditInput(form.starts_at)} onChange={change} /></label><label>Fin<input name="ends_at" required type="datetime-local" value={toEditInput(form.ends_at)} onChange={change} /></label></div><label>Enlace de vídeo opcional<input name="video_source" type="url" value={form.video_source || ''} onChange={change} placeholder="https://…" /></label><label>O sube un vídeo MP4/WEBM (máx. 250 MB)<input name="upload_file" type="file" accept="video/mp4,video/webm,.mp4,.webm" onChange={(event) => handleProgramFileSelection(event, change, form.starts_at)} /></label><small className="form-help">Al seleccionar el archivo, se detecta su duración y se calcula la hora de fin. El archivo se guarda para reproducción pública; solo administradores pueden subirlo.</small></>} />
+  </>
 }
 
 function EventAdmin({ media }) {
