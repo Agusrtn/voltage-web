@@ -24,7 +24,7 @@ function loadYoutubeApi() {
   return youtubeApiPromise
 }
 
-function YoutubeBroadcast({ videoId, playlistUser, title, syncStartAt, serverClockOffsetMs, liveLabel, onError }) {
+function YoutubeBroadcast({ videoId, title, syncStartAt, serverClockOffsetMs, liveLabel, onError }) {
   const hostRef = useRef(null)
   const playerRef = useRef(null)
   const onErrorRef = useRef(onError)
@@ -48,13 +48,7 @@ function YoutubeBroadcast({ videoId, playlistUser, title, syncStartAt, serverClo
         rel: 0,
         origin: window.location.origin,
       }
-      if (playlistUser) {
-        playerVars.listType = 'user_uploads'
-        playerVars.list = playlistUser
-        playerVars.loop = 1
-      } else {
-        playerVars.start = syncStartAt ? Math.max(0, Math.floor((Date.now() + clockOffsetRef.current - new Date(syncStartAt).getTime()) / 1000)) : 0
-      }
+      playerVars.start = syncStartAt ? Math.max(0, Math.floor((Date.now() + clockOffsetRef.current - new Date(syncStartAt).getTime()) / 1000)) : 0
 
       playerRef.current = new YT.Player(hostRef.current, {
         width: '100%',
@@ -73,7 +67,7 @@ function YoutubeBroadcast({ videoId, playlistUser, title, syncStartAt, serverClo
         },
       })
 
-      if (syncStartAt && !playlistUser) {
+      if (syncStartAt) {
         syncTimer = window.setInterval(() => {
           const player = playerRef.current
           if (!player || player.getPlayerState?.() !== YT.PlayerState.PLAYING) return
@@ -90,7 +84,7 @@ function YoutubeBroadcast({ videoId, playlistUser, title, syncStartAt, serverClo
       playerRef.current?.destroy?.()
       playerRef.current = null
     }
-  }, [playlistUser, syncStartAt, title, videoId])
+  }, [syncStartAt, title, videoId])
 
   const toggleMute = () => {
     const player = playerRef.current
@@ -113,6 +107,43 @@ function YoutubeBroadcast({ videoId, playlistUser, title, syncStartAt, serverClo
   </>
 }
 
+function LocalLoopBroadcast({ source, title, liveLabel, onError }) {
+  const videoRef = useRef(null)
+  const onErrorRef = useRef(onError)
+  const [muted, setMuted] = useState(true)
+  const [failed, setFailed] = useState(false)
+  onErrorRef.current = onError
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return undefined
+    video.muted = muted
+    const playback = video.play()
+    playback?.catch(() => {})
+    return undefined
+  }, [muted, source])
+
+  return <>
+    <video
+      ref={videoRef}
+      className="local-loop-video"
+      src={source}
+      autoPlay
+      loop
+      muted={muted}
+      playsInline
+      preload="auto"
+      aria-label={`${title}, señal continua`}
+      onError={(event) => { setFailed(true); onErrorRef.current?.(event) }}
+    />
+    {failed && <div className="loop-fallback-error" role="status"><strong>No se pudo cargar la señal continua</strong><span>Comprueba que el archivo WEBM está incluido en el despliegue.</span></div>}
+    <span className="broadcast-live-badge"><i /> {failed ? 'SEÑAL NO DISPONIBLE' : liveLabel}</span>
+    {!failed && <button className="broadcast-sound" type="button" onClick={() => setMuted((value) => !value)} aria-label={muted ? 'Activar sonido' : 'Silenciar'}>
+      {muted ? 'Activar sonido' : 'Silenciar'}
+    </button>}
+  </>
+}
+
 export function VideoPlayer({ channel, programs = [], activeEvent, timezone, onPlayError, serverNow = new Date(), serverClockSynced = false, channelNumber }) {
   const [fullscreen, setFullscreen] = useState(false)
   const playerAreaRef = useRef(null)
@@ -126,13 +157,13 @@ export function VideoPlayer({ channel, programs = [], activeEvent, timezone, onP
   const eventStatus = activeEvent ? getEventStatus(activeEvent) : null
   const source = activeEvent?.video_source || current?.video_source || channel?.video_source || ''
   const videoId = youtubeVideoId(source)
-  const playlistUser = !source ? channel?.youtube_fallback_user : null
+  const fallbackVideoSource = !source ? channel?.fallback_video_source : null
   const scheduledVideo = current && source === current.video_source && !isYoutubeLiveSource(source)
   const syncStartAt = scheduledVideo ? current.starts_at : null
   const isMp4 = /\.(mp4)(\?.*)?$/i.test(source || '')
-  const canRender = Boolean(videoId || isMp4 || playlistUser)
+  const canRender = Boolean(videoId || isMp4 || fallbackVideoSource)
   const broadcastIsLive = Boolean(eventStatus === 'live' || (current && source === current.video_source) || (channel?.is_active && isYoutubeLiveSource(source)))
-  const liveLabel = playlistUser ? 'EMISIÓN CONTINUA' : broadcastIsLive ? 'EN EMISIÓN' : canRender ? 'FUENTE LISTA' : 'SEÑAL VTE'
+  const liveLabel = fallbackVideoSource ? 'EMISIÓN CONTINUA' : broadcastIsLive ? 'EN EMISIÓN' : canRender ? 'FUENTE LISTA' : 'SEÑAL VTE'
   const eventIsLive = activeEvent && eventStatus === 'live'
   const tuneFullscreen = async () => {
     if (!playerAreaRef.current) return
@@ -143,8 +174,10 @@ export function VideoPlayer({ channel, programs = [], activeEvent, timezone, onP
   if (!channel) return <div className="player empty-player"><span>Selecciona un canal para empezar</span></div>
   return <section className="player-shell">
     <div className="player" ref={playerAreaRef}>
-      {videoId || playlistUser ? (
-        <YoutubeBroadcast key={`${videoId || `uploads:${playlistUser}`}:${syncStartAt || 'live'}`} videoId={videoId} playlistUser={playlistUser} title={channel.name} syncStartAt={syncStartAt} serverClockOffsetMs={clockOffsetMs} liveLabel={liveLabel} onError={onPlayError} />
+      {videoId ? (
+        <YoutubeBroadcast key={`${videoId}:${syncStartAt || 'live'}`} videoId={videoId} title={channel.name} syncStartAt={syncStartAt} serverClockOffsetMs={clockOffsetMs} liveLabel={liveLabel} onError={onPlayError} />
+      ) : fallbackVideoSource ? (
+        <LocalLoopBroadcast key={fallbackVideoSource} source={fallbackVideoSource} title={channel.name} liveLabel={liveLabel} onError={onPlayError} />
       ) : source && isMp4 ? (
         <video controls src={source} onError={onPlayError}>Tu navegador no puede reproducir esta fuente.</video>
       ) : (
@@ -160,7 +193,7 @@ export function VideoPlayer({ channel, programs = [], activeEvent, timezone, onP
       <div className="broadcast-ident">
         <span className="broadcast-channel-number">{String(channelNumber || channel.display_order || '01').padStart(2, '0')}</span>
         <span className="broadcast-channel-name">{channel.name}</span>
-        <Status tone={playlistUser || broadcastIsLive ? 'live' : canRender ? 'violet' : 'muted'}>{playlistUser ? 'Bucle automático' : eventIsLive ? 'En directo' : broadcastIsLive ? 'En emisión' : canRender ? 'Fuente lista' : source ? 'Fuente no compatible' : 'Sin señal'}</Status>
+        <Status tone={fallbackVideoSource || broadcastIsLive ? 'live' : canRender ? 'violet' : 'muted'}>{fallbackVideoSource ? 'Bucle automático' : eventIsLive ? 'En directo' : broadcastIsLive ? 'En emisión' : canRender ? 'Fuente lista' : source ? 'Fuente no compatible' : 'Sin señal'}</Status>
       </div>
       <div className="broadcast-controls">
         <span className="clock-indicator" title={serverClockSynced ? 'Hora sincronizada con Supabase' : 'Usando reloj local'}>{serverClockSynced ? 'RELOJ OFICIAL' : 'RELOJ LOCAL'}</span>

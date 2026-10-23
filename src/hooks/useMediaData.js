@@ -14,7 +14,7 @@ function addYoutubeChannelLinks(channels) {
   return channels.map((channel) => ({
     ...channel,
     youtube_channels: defaultYoutubeChannels[channel.name] || channel.youtube_channels || [],
-    youtube_fallback_user: defaultLoopFallbacks[channel.name] || channel.youtube_fallback_user || null,
+    fallback_video_source: defaultLoopFallbacks[channel.name] || channel.fallback_video_source || null,
   }))
 }
 
