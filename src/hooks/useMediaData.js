@@ -96,6 +96,7 @@ export function useMediaData(user) {
     if (!supabase) throw new Error(configMessage())
     const persistedEntity = { ...entity }
     delete persistedEntity.youtube_channels
+    delete persistedEntity.fallback_video_source
     const query = persistedEntity.id
       ? supabase.from(table).update(persistedEntity).eq('id', persistedEntity.id).select(tableColumns[table]).single()
       : supabase.from(table).insert(persistedEntity).select(tableColumns[table]).single()
