@@ -1,5 +1,5 @@
-import vte1FallbackVideo from '../../voltagevd1.web'
-import vteMusicFallbackVideo from '../../voltagevd2.web'
+import vte1FallbackVideo from '../../voltagevd1.webm'
+import vteMusicFallbackVideo from '../../voltagevd2.webm'
 
 export const defaultYoutubeChannels = {
   VTE1: [
