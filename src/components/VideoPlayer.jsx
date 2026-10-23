@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { isYoutubeLiveSource, youtubeVideoId } from '../lib/media'
+import { isYoutubeLiveSource, youtubeCleanPlayerVars, youtubeVideoId } from '../lib/media'
 import { formatDateTime, getChannelSchedule, getEventStatus } from '../lib/schedule'
 import { ChannelMark, Status } from './ui'
 
@@ -40,12 +40,8 @@ function YoutubeBroadcast({ videoId, title, syncStartAt, serverClockOffsetMs, li
     loadYoutubeApi().then((YT) => {
       if (disposed || !hostRef.current) return
       const playerVars = {
-        autoplay: 1,
-        controls: 0,
-        disablekb: 1,
+        ...youtubeCleanPlayerVars,
         enablejsapi: 1,
-        playsinline: 1,
-        rel: 0,
         origin: window.location.origin,
       }
       playerVars.start = syncStartAt ? Math.max(0, Math.floor((Date.now() + clockOffsetRef.current - new Date(syncStartAt).getTime()) / 1000)) : 0
@@ -64,6 +60,11 @@ function YoutubeBroadcast({ videoId, title, syncStartAt, serverClockOffsetMs, li
             iframe.title = `Emisión de ${title} en YouTube`
           },
           onError: (event) => onErrorRef.current?.(event),
+          onStateChange: (event) => {
+            // El iframe no recibe interacción del espectador. Si YouTube llega a
+            // pausarse, la emisión vuelve a ponerse en marcha inmediatamente.
+            if (event.data === YT.PlayerState.PAUSED) event.target.playVideo()
+          },
         },
       })
 

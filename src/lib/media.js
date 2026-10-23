@@ -24,16 +24,24 @@ export function isYoutubeLiveSource(source) {
   }
 }
 
+export const youtubeCleanPlayerVars = {
+  autoplay: 1,
+  cc_load_policy: 0,
+  controls: 0,
+  disablekb: 1,
+  fs: 0,
+  iv_load_policy: 3,
+  modestbranding: 1,
+  playsinline: 1,
+  rel: 0,
+}
+
 export function youtubeEmbedUrl(source, startSeconds = 0) {
   const videoId = youtubeVideoId(source)
   if (!videoId) return null
   try {
     const embed = new URL(`https://www.youtube-nocookie.com/embed/${videoId}`)
-    embed.searchParams.set('rel', '0')
-    embed.searchParams.set('controls', '0')
-    embed.searchParams.set('disablekb', '1')
-    embed.searchParams.set('playsinline', '1')
-    embed.searchParams.set('autoplay', '1')
+    Object.entries(youtubeCleanPlayerVars).forEach(([key, value]) => embed.searchParams.set(key, String(value)))
     embed.searchParams.set('mute', '1')
     if (startSeconds > 0) embed.searchParams.set('start', String(Math.floor(startSeconds)))
     return embed.toString()

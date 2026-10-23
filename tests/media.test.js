@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isYoutubeLiveSource, youtubeEmbedUrl } from '../src/lib/media'
+import { isYoutubeLiveSource, youtubeCleanPlayerVars, youtubeEmbedUrl } from '../src/lib/media'
 
 describe('fuentes de reproducción', () => {
   it('convierte URLs de vídeo de YouTube a embeds de privacidad mejorada', () => {
@@ -9,6 +9,18 @@ describe('fuentes de reproducción', () => {
     expect(youtubeEmbedUrl('https://www.youtube.com/shorts/dQw4w9WgXcQ')).toContain('/embed/dQw4w9WgXcQ')
     expect(youtubeEmbedUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ')).toContain('controls=0')
     expect(youtubeEmbedUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ')).toContain('autoplay=1')
+    expect(youtubeEmbedUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ')).toContain('disablekb=1')
+    expect(youtubeEmbedUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ')).toContain('fs=0')
+  })
+
+  it('usa ajustes de emisión sin controles ni interfaz auxiliar de YouTube', () => {
+    expect(youtubeCleanPlayerVars).toMatchObject({
+      autoplay: 1,
+      controls: 0,
+      disablekb: 1,
+      fs: 0,
+      iv_load_policy: 3,
+    })
   })
 
   it('rechaza enlaces que no identifican un vídeo de YouTube', () => {
