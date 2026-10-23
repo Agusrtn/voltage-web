@@ -98,9 +98,10 @@ No distribuyas este script con un UUID ya rellenado y no crees una interfaz púb
 
 Tras obtener el rol admin:
 
-1. En **Administración > Canales**, crea el canal, orden, logotipo HTTPS, descripción y fuente. Marca *disponible públicamente* solo cuando deba publicarse.
-2. En **Programas**, selecciona un canal y define inicio/fin. El formulario y PostgreSQL rechazan solapes dentro de ese canal. Los valores se convierten a UTC; se muestran con `VITE_APP_TIMEZONE`.
-3. En **Eventos**, añade el intervalo y, opcionalmente, un canal asociado. `scheduled` se vuelve “En directo” únicamente cuando la hora actual está dentro de su intervalo; `cancelled` nunca se reproduce. Para evitar interrupciones simultáneas de un mismo canal, los eventos asociados con fecha de fin no pueden solaparse en PostgreSQL.
+1. Para cargar los canales iniciales **VTE1** y **VTE MUSIC**, ejecuta una vez [`supabase/manual/seed_default_channels.sql`](supabase/manual/seed_default_channels.sql) en el SQL Editor. Si Supabase no está configurado, ambos aparecen igualmente en el modo de muestra. Los enlaces a los canales de YouTube se ofrecen como accesos externos.
+2. En **Administración > Canales**, crea el canal, orden, logotipo HTTPS, descripción y fuente. Marca *disponible públicamente* solo cuando deba publicarse.
+3. En **Programas**, selecciona un canal y define inicio/fin. Pega la URL compartible de un vídeo o directo de YouTube (o MP4 HTTPS) en la fuente opcional. El reproductor inserta vídeos concretos; una página de canal como `youtube.com/@voltagerbx` no es una fuente de vídeo insertable. El formulario y PostgreSQL rechazan solapes dentro de ese canal. Los valores se convierten a UTC; se muestran con `VITE_APP_TIMEZONE`.
+4. En **Eventos**, añade el intervalo y, opcionalmente, un canal asociado. `scheduled` se vuelve “En directo” únicamente cuando la hora actual está dentro de su intervalo; `cancelled` nunca se reproduce. Para evitar interrupciones simultáneas de un mismo canal, los eventos asociados con fecha de fin no pueden solaparse en PostgreSQL.
 
 Un evento vivo tiene prioridad visual y de fuente sobre el programa regular de su canal. Al terminar, el reproductor vuelve al programa actual. El desplazamiento temporal se intenta únicamente con una fuente de vídeo de programa compatible con YouTube; YouTube, directos y vídeos del propietario pueden prohibir inserción o búsqueda. La app muestra entonces un estado de error/limitación, en lugar de prometer continuidad no verificable.
 
@@ -152,5 +153,6 @@ supabase/
 tests/              # pruebas de la lógica temporal
 docs/               # informe de comprobaciones
 ```
-#   v o l t a g e - w e b  
+#   v o l t a g e - w e b 
+ 
  

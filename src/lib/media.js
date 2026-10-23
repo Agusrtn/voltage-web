@@ -4,7 +4,10 @@ export function youtubeEmbedUrl(source, startSeconds = 0) {
     const url = new URL(source)
     let videoId = null
     if (url.hostname.includes('youtu.be')) videoId = url.pathname.slice(1)
-    if (url.hostname.includes('youtube.com')) videoId = url.searchParams.get('v') || (url.pathname.startsWith('/embed/') ? url.pathname.split('/')[2] : null)
+    if (url.hostname.includes('youtube.com')) {
+      const pathParts = url.pathname.split('/').filter(Boolean)
+      videoId = url.searchParams.get('v') || (['embed', 'live', 'shorts'].includes(pathParts[0]) ? pathParts[1] : null)
+    }
     if (!videoId) return null
     const embed = new URL(`https://www.youtube-nocookie.com/embed/${videoId}`)
     embed.searchParams.set('rel', '0')

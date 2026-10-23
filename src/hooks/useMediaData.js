@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { demoChannels, demoEvents, demoPrograms } from '../data/demoContent'
+import { defaultYoutubeChannels, demoChannels, demoEvents, demoPrograms } from '../data/demoContent'
 import { configMessage, supabase, supabaseConfigured } from '../lib/supabase'
 import { favoriteTransition } from '../lib/favorites'
 
@@ -8,6 +8,13 @@ const tableColumns = {
   programs: 'id, channel_id, title, description, video_source, starts_at, ends_at, created_at, updated_at',
   events: 'id, channel_id, title, description, video_source, starts_at, ends_at, status, created_at, updated_at',
   saved_videos: 'id, content_key, title, thumbnail_url, video_source, created_at',
+}
+
+function addYoutubeChannelLinks(channels) {
+  return channels.map((channel) => ({
+    ...channel,
+    youtube_channels: defaultYoutubeChannels[channel.name] || channel.youtube_channels || [],
+  }))
 }
 
 export function useMediaData(user) {
@@ -35,7 +42,7 @@ export function useMediaData(user) {
     if (firstError) {
       setError(`No se ha podido cargar el contenido: ${firstError.message}`)
     } else {
-      setChannels(channelsResult.data); setPrograms(programsResult.data); setEvents(eventsResult.data); setSavedVideos(savesResult.data)
+      setChannels(addYoutubeChannelLinks(channelsResult.data)); setPrograms(programsResult.data); setEvents(eventsResult.data); setSavedVideos(savesResult.data)
       setError(null)
     }
     setLoading(false)

@@ -24,7 +24,10 @@ export function VideoPlayer({ channel, programs = [], activeEvent, timezone, onP
         <div className="player-placeholder">
           <span className="play-symbol">▶</span>
           <strong>{source ? 'Fuente pendiente de compatibilidad' : 'Fuente de emisión pendiente'}</strong>
-          <p>{source ? 'La fuente está guardada, pero no puede reproducirse con el reproductor actual. Comprueba su formato, permisos e inserción.' : 'Este canal estará disponible cuando se configure una fuente compatible desde el panel.'}</p>
+          <p>{source ? 'La fuente está guardada, pero no puede reproducirse con el reproductor actual. Comprueba su formato, permisos e inserción.' : 'Los enlaces a canales de YouTube no se pueden insertar como vídeo. Añade la URL de un vídeo o directo desde Administración para reproducirlo aquí.'}</p>
+          {channel.youtube_channels?.length > 0 && <div className="youtube-sources" aria-label={`Canales de YouTube de ${channel.name}`}>
+            {channel.youtube_channels.map((sourceItem) => <a key={sourceItem.url} href={sourceItem.url} target="_blank" rel="noreferrer">{sourceItem.label}<span>↗</span></a>)}
+          </div>}
         </div>
       )}
       <div className="player-live"><Status tone={canRender ? 'live' : 'muted'}>{canRender ? 'Emisión configurada' : source ? 'Fuente no compatible' : 'Sin fuente'}</Status></div>
