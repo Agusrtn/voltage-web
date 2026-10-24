@@ -1,3 +1,4 @@
+import vteLogo from '../../vte.png'
 import './VideoPlayer.css'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { isYoutubeLiveSource, youtubeCleanPlayerVars, youtubeVideoId } from '../lib/media'
@@ -387,7 +388,7 @@ export function VideoPlayer({ channel, programs = [], activeEvent, timezone, onP
     </div>
     <div className="broadcast-hud" role="group" aria-label="Controles de emisión">
       <div className="hud-channel">
-        <span className="hud-channel-number">{channelNumberLabel}</span>
+        {channel.name?.toLowerCase().includes('vte') && <span className="logo-crop hud-vte-logo"><img src={vteLogo} alt="" /></span>}<span className="hud-channel-number">{channelNumberLabel}</span>
         <strong>{channel.name}</strong>
         <span className={'hud-status ' + (broadcastIsLive ? 'is-live' : '')}><i />{statusLabel}</span>
       </div>

@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom'
+import vteLogo from '../../vte.png'
 
 export function ChannelMark({ channel, compact = false }) {
   if (channel?.logo_url) return <img className="channel-logo" src={channel.logo_url} alt={`Logo de ${channel.name}`} />
+  if (/vte/i.test(channel?.name || '')) return <span className={`channel-mark ${compact ? 'compact' : ''} vte-channel-mark`} aria-hidden="true"><img src={vteLogo} alt="" /></span>
   return <span className={`channel-mark ${compact ? 'compact' : ''}`} aria-hidden="true">{channel?.name?.slice(0, 2).toUpperCase() || 'VT'}</span>
 }
 

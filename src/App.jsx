@@ -10,6 +10,7 @@ import { youtubeVideoId } from './lib/media'
 import { adminAccessState } from './lib/access'
 import { ChannelMark, EmptyState, LoadingGrid, Notice, Status } from './components/ui'
 import { VideoPlayer } from './components/VideoPlayer'
+import voltageLogo from '../VOLTAGE.png'
 import './styles.css'
 
 const timezone = import.meta.env.VITE_APP_TIMEZONE || 'Europe/Madrid'
@@ -22,12 +23,13 @@ function Header({ auth }) {
   const [open, setOpen] = useState(false)
   const close = () => setOpen(false)
   return <header className="site-header">
-    <Link className="brand" to="/" onClick={close}><span className="brand-wordmark">VOLTAGE<span>®</span></span></Link>
+    <Link className="brand" to="/" onClick={close} aria-label="VOLTAGE, inicio"><span className="logo-crop brand-logo-crop"><img src={voltageLogo} alt="VOLTAGE" /></span></Link>
     <button className="menu-button" aria-label={open ? 'Cerrar navegación' : 'Abrir navegación'} aria-expanded={open} aria-controls="primary-navigation" onClick={() => setOpen(!open)}><span /><span /><span /></button>
     <nav id="primary-navigation" className={`site-nav ${open ? 'open' : ''}`} aria-label="Navegación principal">
       <NavLink to="/tv" onClick={close}>Televisión</NavLink>
       <NavLink to="/guia" onClick={close}>Guía TV</NavLink>
       <NavLink to="/canales" onClick={close}>Canales</NavLink>
+      <NavLink to="/artistas" onClick={close}>Artistas</NavLink>
       <NavLink to="/eventos" onClick={close}>Eventos</NavLink>
       <NavLink to="/mi-lista" onClick={close}>Mi lista</NavLink>
       {auth.isAdmin && <NavLink to="/admin" onClick={close}>Administración</NavLink>}
@@ -51,6 +53,7 @@ function AppShell() {
         <Route path="/tv" element={<TelevisionPage media={media} />} />
         <Route path="/guia" element={<GuidePage media={media} />} />
         <Route path="/canales" element={<ChannelsPage media={media} />} />
+        <Route path="/artistas" element={<ArtistsPage media={media} />} />
         <Route path="/eventos" element={<EventsPage media={media} />} />
         <Route path="/mi-lista" element={<SavedPage auth={auth} media={media} />} />
         <Route path="/perfil" element={<ProfilePage auth={auth} />} />
@@ -59,7 +62,7 @@ function AppShell() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </main>
-    <footer><span>VOLTAGE®</span><small>Televisión, música y cultura en movimiento.</small></footer>
+    <footer><span className="logo-crop footer-logo-crop"><img src={voltageLogo} alt="VOLTAGE" /></span><small>Televisión, música y cultura en movimiento.</small></footer>
   </div>
 }
 
@@ -68,12 +71,39 @@ function HomePage({ auth, media }) {
   const channel = media.channels.find((item) => item.id === channelId) || media.channels.find((item) => item.is_active) || media.channels[0]
   const liveEvent = media.events.find((event) => event.channel_id === channel?.id && getEventStatus(event, media.serverNow) === 'live')
     return <>
-    <section className="hero"><div className="hero-copy"><span className="eyebrow">UNA NUEVA SEÑAL · VOLTAGE®</span><h1>Esto es <span>VOLTAGE.</span></h1><p>Un espacio para descubrir música, artistas y cultura. Entra en directo y encuentra lo que viene.</p><div className="hero-actions"><Link className="button primary" to="/tv">Ver televisión <span>↗</span></Link><Link className="button quiet" to="/guia">Explorar guía</Link></div></div><div className="hero-art" aria-label="VOLTAGE, señal en movimiento"><span>VOLTAGE</span><i>TELEVISIÓN · MÚSICA · CULTURA</i><div className="signal a" /><div className="signal b" /><div className="signal c" /></div></section>
+    <section className="hero"><div className="hero-copy"><span className="eyebrow">UNA NUEVA SEÑAL · VOLTAGE®</span><h1>Esto es <span>VOLTAGE.</span></h1><p>Un espacio para descubrir música, artistas y cultura. Entra en directo y encuentra lo que viene.</p><div className="hero-actions"><Link className="button primary" to="/tv">Ver televisión <span>↗</span></Link><Link className="button quiet" to="/guia">Explorar guía</Link></div></div><div className="hero-art" aria-label="VOLTAGE, señal en movimiento"><span className="logo-crop hero-logo-crop"><img src={voltageLogo} alt="VOLTAGE" /></span><i>TELEVISIÓN · MÚSICA · CULTURA</i><div className="signal a" /><div className="signal b" /><div className="signal c" /></div></section>
     <section className="home-player section-block"><div className="section-heading"><div><span className="eyebrow">EN PANTALLA</span><h2>Televisión en directo</h2></div><Link to="/tv">Abrir reproductor →</Link></div><VideoPlayer channel={channel} programs={media.broadcastPrograms} activeEvent={liveEvent} timezone={timezone} serverNow={media.serverNow} serverClockSynced={media.serverClockSynced} /></section>
     <section className="section-block"><div className="section-heading"><div><span className="eyebrow">SEÑAL</span><h2>Canales disponibles</h2></div><Link to="/canales">Todos los canales →</Link></div>{media.loading ? <LoadingGrid /> : <div className="channel-rail">{media.channels.slice(0, 4).map((item) => <button className={`channel-card ${channel?.id === item.id ? 'selected' : ''}`} key={item.id} onClick={() => setChannelId(item.id)}><ChannelMark channel={item} /><div><Status tone={item.is_active ? 'live' : 'muted'}>{item.is_active ? 'Disponible' : 'Pausado'}</Status><strong>{item.name}</strong><p>{item.description}</p></div><span className="card-arrow">↗</span></button>)}</div>}</section>
     <section className="section-block split-overview"><ProgramSnapshot channels={media.channels} programs={media.broadcastPrograms} now={media.serverNow} /><EventSnapshot events={media.events} now={media.serverNow} /></section>
+    <section className="section-block artist-feature"><div className="section-heading"><div><span className="eyebrow">PERSONAS DETRÁS DE LA SEÑAL</span><h2>Artistas y proyectos VTE</h2><p>Descubre los canales creativos que forman parte de la programación.</p></div><Link to="/artistas">Ver artistas ↗</Link></div>{media.loading ? <LoadingGrid /> : <ArtistGrid channels={media.channels} preview />}</section>
+    <section className="section-block voltage-experience"><div className="section-heading"><div><span className="eyebrow">VTE · EN VIVO Y EN COMUNIDAD</span><h2>Más que una señal</h2><p>Programación continua, eventos y artistas reunidos en un solo espacio.</p></div></div><div className="experience-grid"><Link className="experience-card" to="/tv"><span>01 / EMISIÓN 24·7</span><h3>Siempre hay algo en pantalla.</h3><p>Sintoniza las señales VTE y descubre qué se está emitiendo ahora.</p><b>Ver televisión ↗</b></Link><Link className="experience-card" to="/eventos"><span>02 / EVENTOS</span><h3>Momentos para vivir en directo.</h3><p>Consulta las próximas emisiones especiales y galas publicadas.</p><b>Explorar agenda ↗</b></Link><Link className="experience-card" to="/artistas"><span>03 / TALENTO</span><h3>Una escena en movimiento.</h3><p>Conoce los artistas y proyectos que ponen voz a la programación.</p><b>Conocer artistas ↗</b></Link></div></section>
     <section className="member-cta"><div><span className="eyebrow">TU ESPACIO</span><h2>Guarda lo que quieres volver a ver.</h2><p>Mi lista se sincroniza de forma segura entre dispositivos cuando inicias sesión.</p></div><Link className="button primary" to={auth.user ? '/mi-lista' : '/acceso'}>{auth.user ? 'Ir a Mi lista' : 'Crear cuenta'}</Link></section>
   </>
+}
+
+function getArtistProjects(channels) {
+  const projects = new Map()
+  channels.forEach((channel) => {
+    ;(channel.youtube_channels || []).forEach((source) => {
+      if (!source.url || projects.has(source.url)) return
+      projects.set(source.url, { ...source, label: source.label || source.name || source.handle || 'Proyecto VTE', channelName: channel.name })
+    })
+  })
+  return [...projects.values()]
+}
+
+function ArtistGrid({ channels, preview = false }) {
+  const artists = getArtistProjects(channels)
+  const items = preview ? artists.slice(0, 4) : artists
+  if (!items.length) return <EmptyState title="Pronto habrá artistas" detail="Los perfiles aparecerán aquí cuando sus canales estén configurados en VTE." />
+  return <div className="artist-grid">{items.map((artist, index) => <article className="artist-card" key={artist.url}>
+    <div className={'artist-card-art artist-art-' + (index % 4)}><span className="artist-index">VTE / {String(index + 1).padStart(2, '0')}</span><b>{artist.label.slice(0, 1).toUpperCase()}</b><i>{artist.channelName}</i></div>
+    <div className="artist-card-copy"><span className="eyebrow">ARTISTA · PROYECTO</span><h3>{artist.label}</h3><p>Descubre sus vídeos, música y novedades en la señal {artist.channelName}.</p><a href={artist.url} target="_blank" rel="noreferrer">Canal oficial <span>↗</span></a></div>
+  </article>)}</div>
+}
+
+function ArtistsPage({ media }) {
+  return <div className="page artists-page"><PageIntro eyebrow="TALENTO VTE" title="Artistas y proyectos" detail="Conoce los canales y proyectos creativos que forman parte de la programación de Voltage." />{media.loading ? <LoadingGrid /> : <ArtistGrid channels={media.channels} />}<section className="artists-callout"><span className="eyebrow">UNA ESCENA EN MOVIMIENTO</span><h2>Música, eventos y nuevas voces.</h2><p>Voltage conecta artistas con una programación que se vive en directo y se descubre a cualquier hora.</p><Link className="button primary" to="/tv">Explorar la programación <span>↗</span></Link></section></div>
 }
 
 function ProgramSnapshot({ channels, programs, now }) {
