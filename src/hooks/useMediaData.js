@@ -149,12 +149,23 @@ export function useMediaData(user) {
     if (!supabase) throw new Error(configMessage())
     const { data, error: invokeError } = await supabase.functions.invoke('youtube-catalog', { body: { handle } })
     if (invokeError) {
-      try {
-        const body = await invokeError.context?.json()
-        if (body?.error) throw new Error(body.error)
-      } catch (error) {
-        if (error instanceof Error && error.message !== invokeError.message) throw error
+      const context = invokeError.context
+      let detail = ''
+      if (typeof context?.json === 'function') {
+        try {
+          const body = await context.json()
+          detail = typeof body?.error === 'string' ? body.error : typeof body?.message === 'string' ? body.message : ''
+        } catch {
+          // A Supabase function error can have a non-Response context or a non-JSON body.
+        }
+      } else if (typeof context?.message === 'string') {
+        detail = context.message
       }
+      if (invokeError.name === 'FunctionsFetchError') {
+        const reason = detail ? ` (${detail})` : ''
+        throw new Error(`No se pudo conectar con la función de YouTube en Supabase${reason}. Comprueba la conexión y que youtube-catalog esté desplegada.`)
+      }
+      if (detail) throw new Error(detail)
       throw new Error(invokeError.message || 'No se pudo consultar el catálogo de YouTube.')
     }
     if (data?.error) throw new Error(data.error)
