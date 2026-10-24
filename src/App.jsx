@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from './hooks/useAuth'
 import { useMediaData } from './hooks/useMediaData'
 import { configMessage } from './lib/supabase'
+import { normalizeVteChannelName } from './data/demoContent'
 import { youtubeVideoId } from './lib/media'
 import { adminAccessState } from './lib/access'
 import { ChannelMark, EmptyState, LoadingGrid, Notice, Status } from './components/ui'
@@ -12,6 +13,10 @@ import { VideoPlayer } from './components/VideoPlayer'
 import './styles.css'
 
 const timezone = import.meta.env.VITE_APP_TIMEZONE || 'Europe/Madrid'
+const defaultVteChannels = [
+  { key: 'vte1', name: 'VTE1', description: 'VOLTAGE RBX · RTN Events', display_order: 1 },
+  { key: 'vtemusic', name: 'VTE MUSIC', description: 'RTN Music · Badvyx', display_order: 2 },
+]
 
 function Header({ auth }) {
   const [open, setOpen] = useState(false)
@@ -277,6 +282,7 @@ function AdminPage({ media }) {
 }
 
 function YoutubeCatalogAdmin({ media }) {
+  const [creatingChannels, setCreatingChannels] = useState(false)
   const sources = media.channels.flatMap((channel) => (channel.youtube_channels || []).map((source) => ({
     ...source,
     channelId: channel.id,
@@ -295,6 +301,28 @@ function YoutubeCatalogAdmin({ media }) {
   const [endsAt, setEndsAt] = useState(() => toEditInput(new Date(media.serverNow.getTime() + 60 * 60 * 1000)))
   const source = sources[Number(sourceIndex)]
   const visibleVideos = videos.filter((video) => `${video.title} ${video.description}`.toLowerCase().includes(search.trim().toLowerCase()))
+  const existingChannelKeys = new Set(media.channels.map((channel) => normalizeVteChannelName(channel.name)))
+  const missingChannels = defaultVteChannels.filter((channel) => !existingChannelKeys.has(channel.key))
+
+  const createMissingChannels = async () => {
+    if (!missingChannels.length) return
+    setCreatingChannels(true); setError(null); setNotice(null)
+    try {
+      for (const channel of missingChannels) {
+        await media.saveEntity('channels', {
+          name: channel.name,
+          description: channel.description,
+          is_active: true,
+          display_order: channel.display_order,
+        })
+      }
+      setNotice(`Se han creado ${missingChannels.map((channel) => channel.name).join(' y ')} en Supabase. Ya puedes consultar sus vídeos.`)
+    } catch (err) {
+      setError(`No se pudieron crear los canales en Supabase: ${err.message}`)
+    } finally {
+      setCreatingChannels(false)
+    }
+  }
 
   const loadCatalog = async () => {
     if (!source) return
@@ -339,9 +367,11 @@ function YoutubeCatalogAdmin({ media }) {
 
   return <section className="youtube-admin">
     <div className="youtube-admin-intro"><div><span className="eyebrow">YOUTUBE DATA API · CATALOGO</span><h2>Elige vídeos para emitir</h2><p>Consulta las subidas públicas de los canales VTE y añádelas al horario del canal correspondiente. Las claves permanecen en los secretos de Supabase.</p></div></div>
-    {!sources.length ? <Notice>Primero crea VTE1 y VTE MUSIC o configura sus enlaces de YouTube.</Notice> : <>
+    {error && <Notice tone="error">{error}</Notice>}{notice && <Notice tone="success">{notice}</Notice>}
+    {media.loading && media.channels.length === 0 ? <div className="catalog-empty">Cargando canales de Supabase…</div> : <>
+    {missingChannels.length > 0 && <div className="catalog-channel-setup"><Notice>Este aviso no indica un problema con la clave de YouTube. Faltan estos canales de emisión en la tabla channels de Supabase: {missingChannels.map((channel) => channel.name).join(' y ')}. Puedes crearlos aquí; sus enlaces de YouTube se asignan automáticamente.</Notice><button className="button primary" type="button" onClick={createMissingChannels} disabled={creatingChannels || media.loading}>{creatingChannels ? 'Creando canales…' : `Crear ${missingChannels.map((channel) => channel.name).join(' y ')}`}</button></div>}
+    {sources.length > 0 && <>
       <div className="youtube-catalog-toolbar"><label>Canal de YouTube<select value={sourceIndex} onChange={(event) => { setSourceIndex(event.target.value); setVideos([]); setSelectedVideo(null); setNotice(null); setError(null) }}>{sources.map((item, index) => <option key={`${item.handle}-${item.channelId}`} value={index}>{item.channelName} · {item.label}</option>)}</select></label><button className="button primary" type="button" onClick={loadCatalog} disabled={loading}>{loading ? 'Cargando vídeos…' : 'Cargar vídeos'}</button></div>
-      {error && <Notice tone="error">{error}</Notice>}{notice && <Notice tone="success">{notice}</Notice>}
       {videos.length > 0 && <label className="catalog-search">Buscar en los vídeos cargados<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Título del vídeo" /></label>}
       {videos.length > 0 && <div className="youtube-video-grid">{visibleVideos.map((video) => <button type="button" key={video.videoId} className={`youtube-video-option ${selectedVideo?.videoId === video.videoId ? 'selected' : ''}`} onClick={() => setSelectedVideo(video)} aria-pressed={selectedVideo?.videoId === video.videoId}>
         <span className="youtube-video-thumb">{video.thumbnailUrl && <img src={video.thumbnailUrl} alt="" loading="lazy" />}<span>{video.liveBroadcastContent === 'live' ? 'EN DIRECTO' : video.duration ? formatYoutubeDuration(video.duration) : 'YOUTUBE'}</span></span><span className="youtube-video-copy"><b>{video.title}</b><small>{video.publishedAt ? formatDateTime(video.publishedAt, timezone, true) : 'Fecha no disponible'}</small></span>
@@ -349,6 +379,7 @@ function YoutubeCatalogAdmin({ media }) {
       {videos.length > 0 && visibleVideos.length === 0 && <div className="catalog-empty">No hay vídeos que coincidan con la búsqueda.</div>}
       {videos.length === 0 && !loading && !error && <div className="catalog-empty">Selecciona un canal y pulsa “Cargar vídeos” para consultar sus subidas públicas.</div>}
       {selectedVideo && <form className="youtube-schedule-form" onSubmit={scheduleVideo}><div className="form-title"><span className="eyebrow">PROGRAMAR EN {source.channelName.toUpperCase()}</span><h2>{selectedVideo.title}</h2></div><div className="form-pair"><label>Inicio<input required type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} /></label><label>Fin<input required type="datetime-local" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} /></label></div><button className="button primary" disabled={saving}>{saving ? 'Guardando…' : 'Añadir a programas'}</button></form>}
+    </>}
     </>}
   </section>
 }

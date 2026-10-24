@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { defaultLoopFallbacks, defaultYoutubeChannels, demoChannels, demoEvents, demoPrograms } from '../data/demoContent'
+import { demoChannels, demoEvents, demoPrograms, getDefaultLoopFallback, getDefaultYoutubeChannels } from '../data/demoContent'
 import { configMessage, supabase, supabaseConfigured } from '../lib/supabase'
 import { favoriteTransition } from '../lib/favorites'
 import { buildBroadcastSchedule } from '../lib/schedule'
@@ -12,17 +12,20 @@ const tableColumns = {
 }
 
 function addYoutubeChannelLinks(channels) {
-  return channels.map((channel) => ({
-    ...channel,
-    youtube_channels: defaultYoutubeChannels[channel.name] || channel.youtube_channels || [],
-    fallback_video_source: defaultLoopFallbacks[channel.name] || channel.fallback_video_source || null,
-  }))
+  return channels.map((channel) => {
+    const youtubeChannels = getDefaultYoutubeChannels(channel.name)
+    return {
+      ...channel,
+      youtube_channels: youtubeChannels.length ? youtubeChannels : channel.youtube_channels || [],
+      fallback_video_source: getDefaultLoopFallback(channel.name) || channel.fallback_video_source || null,
+    }
+  })
 }
 
 export function useMediaData(user) {
-  const [channels, setChannels] = useState(demoChannels)
-  const [programs, setPrograms] = useState(demoPrograms)
-  const [events, setEvents] = useState(demoEvents)
+  const [channels, setChannels] = useState(supabaseConfigured ? [] : demoChannels)
+  const [programs, setPrograms] = useState(supabaseConfigured ? [] : demoPrograms)
+  const [events, setEvents] = useState(supabaseConfigured ? [] : demoEvents)
   const [savedVideos, setSavedVideos] = useState([])
   const [loading, setLoading] = useState(supabaseConfigured)
   const [error, setError] = useState(null)
@@ -58,7 +61,7 @@ export function useMediaData(user) {
     if (firstError) {
       setError(`No se ha podido cargar el contenido: ${firstError.message}`)
     } else {
-      const remoteChannels = channelsResult.data?.length ? channelsResult.data : demoChannels
+      const remoteChannels = channelsResult.data || []
       setChannels(addYoutubeChannelLinks(remoteChannels)); setPrograms(programsResult.data); setEvents(eventsResult.data); setSavedVideos(savesResult.data)
       setError(null)
     }

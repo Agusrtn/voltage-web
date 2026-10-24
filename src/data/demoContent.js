@@ -17,6 +17,28 @@ export const defaultLoopFallbacks = {
   'VTE MUSIC': vteMusicFallbackVideo,
 }
 
+export function normalizeVteChannelName(name) {
+  return String(name || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+}
+
+export function getDefaultYoutubeChannels(name) {
+  const key = normalizeVteChannelName(name)
+  if (key === 'vte1') return defaultYoutubeChannels.VTE1
+  if (key === 'vtemusic') return defaultYoutubeChannels['VTE MUSIC']
+  return []
+}
+
+export function getDefaultLoopFallback(name) {
+  const key = normalizeVteChannelName(name)
+  if (key === 'vte1') return defaultLoopFallbacks.VTE1
+  if (key === 'vtemusic') return defaultLoopFallbacks['VTE MUSIC']
+  return null
+}
+
 export const demoChannels = [
   {
     id: 'demo-vte1', name: 'VTE1', description: 'VOLTAGE RBX · RTN Events',

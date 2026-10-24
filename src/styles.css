@@ -266,6 +266,8 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 input[type="file"] { min-height: 44px; padding: 7px; color: #a8b7c8; font-size: 10px; }
 input[type="file"]::file-selector-button { min-height: 28px; margin-right: 10px; padding: 0 9px; border: 1px solid var(--line-strong); color: #dce8f5; background: #172233; font: inherit; cursor: pointer; }
 .youtube-admin { display: grid; gap: 16px; padding: clamp(16px, 2.5vw, 24px); border: 1px solid var(--line); background: #101621; }
+.catalog-channel-setup { display: grid; justify-items: start; gap: 0; }
+.catalog-channel-setup .notice { width: 100%; }
 .youtube-admin-intro h2 { margin: 8px 0 5px; font-size: 21px; font-weight: 500; letter-spacing: -.04em; }
 .youtube-admin-intro p { max-width: 680px; margin: 0; color: #a0abba; font-size: 11px; line-height: 1.65; }
 .youtube-catalog-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px; padding: 14px; border: 1px solid var(--line); background: #0c131d; }
