@@ -1,15 +1,16 @@
 import { getChannelSchedule, getEventStatus, formatDateTime, hasScheduleConflict } from './lib/schedule'
 import { buildAutoProgramPlan } from './lib/autoprogram'
-import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from './hooks/useAuth'
 import { useMediaData } from './hooks/useMediaData'
 import { configMessage } from './lib/supabase'
 import { normalizeVteChannelName } from './data/demoContent'
-import { youtubeVideoId } from './lib/media'
+import { youtubeContentEmbedUrl, youtubeVideoId } from './lib/media'
 import { adminAccessState } from './lib/access'
 import { ChannelMark, EmptyState, LoadingGrid, Notice, Status } from './components/ui'
 import { VideoPlayer } from './components/VideoPlayer'
+import { VoltageAmbientBackground } from './components/VoltageAmbientBackground'
 import voltageLogo from '../VOLTAGE.png'
 import './styles.css'
 
@@ -21,26 +22,42 @@ const defaultVteChannels = [
 
 function Header({ auth }) {
   const [open, setOpen] = useState(false)
-  const close = () => setOpen(false)
+  const [query, setQuery] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const searchInputRef = useRef(null)
+  const navigate = useNavigate()
+  const close = () => { setOpen(false); setSearchOpen(false) }
+  useEffect(() => { if (searchOpen) searchInputRef.current?.focus() }, [searchOpen])
+  const search = (event) => {
+    event.preventDefault()
+    const value = query.trim()
+    close()
+    navigate(value ? '/explorar?q=' + encodeURIComponent(value) : '/explorar')
+  }
   return <header className="site-header">
     <Link className="brand" to="/" onClick={close} aria-label="VOLTAGE, inicio"><span className="logo-crop brand-logo-crop"><img src={voltageLogo} alt="VOLTAGE" /></span></Link>
     <button className="menu-button" aria-label={open ? 'Cerrar navegación' : 'Abrir navegación'} aria-expanded={open} aria-controls="primary-navigation" onClick={() => setOpen(!open)}><span /><span /><span /></button>
-    <nav id="primary-navigation" className={`site-nav ${open ? 'open' : ''}`} aria-label="Navegación principal">
-      <NavLink to="/tv" onClick={close}>Televisión</NavLink>
-      <NavLink to="/guia" onClick={close}>Guía TV</NavLink>
-      <NavLink to="/canales" onClick={close}>Canales</NavLink>
-      <NavLink to="/artistas" onClick={close}>Artistas</NavLink>
+    <nav id="primary-navigation" className={'site-nav ' + (open ? 'open' : '')} aria-label="Navegación principal">
+      <NavLink to="/" end onClick={close}>Inicio</NavLink>
+      <NavLink to="/explorar" onClick={close}>Explorar</NavLink>
+      <NavLink to="/programas" onClick={close}>Programas</NavLink>
+      <NavLink to="/tv" onClick={close}>TV en directo</NavLink>
       <NavLink to="/eventos" onClick={close}>Eventos</NavLink>
+      <NavLink to="/artistas" onClick={close}>Artistas</NavLink>
       <NavLink to="/mi-lista" onClick={close}>Mi lista</NavLink>
       {auth.isAdmin && <NavLink to="/admin" onClick={close}>Administración</NavLink>}
     </nav>
+    <form className={"header-search " + (searchOpen ? "open" : "")} role="search" onSubmit={search}>
+      <label className="sr-only" htmlFor="site-search">Buscar vídeos y programas</label>
+      <input ref={searchInputRef} id="site-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { setSearchOpen(false); event.currentTarget.blur() } }} placeholder="Buscar" />
+      <button type="submit" aria-label="Buscar en VOLTAGE" onClick={(event) => { if (window.matchMedia?.("(max-width: 520px)").matches && !searchOpen) { event.preventDefault(); setSearchOpen(true) } }}><span aria-hidden="true">⌕</span></button>
+    </form>
     <Link className="account-link" to={auth.user ? '/perfil' : '/acceso'} onClick={close} aria-label={auth.user ? 'Ir a mi perfil' : 'Iniciar sesión'}>
       {auth.profile?.avatar_url ? <img src={auth.profile.avatar_url} alt="" /> : <span>{auth.profile?.username?.slice(0, 1).toUpperCase() || '◌'}</span>}
       <em>{auth.user ? auth.profile?.username || 'Mi perfil' : 'Acceder'}</em>
     </Link>
   </header>
 }
-
 function AppShell() {
   const auth = useAuth()
   const media = useMediaData(auth.user)
@@ -50,6 +67,9 @@ function AppShell() {
     <main>
       <Routes>
         <Route path="/" element={<HomePage auth={auth} media={media} />} />
+        <Route path="/explorar" element={<CatalogPage media={media} />} />
+        <Route path="/programas" element={<ProgramsPage media={media} />} />
+        <Route path="/contenido/:type/:id" element={<ContentDetailPage auth={auth} media={media} />} />
         <Route path="/tv" element={<TelevisionPage media={media} />} />
         <Route path="/guia" element={<GuidePage media={media} />} />
         <Route path="/canales" element={<ChannelsPage media={media} />} />
@@ -62,23 +82,236 @@ function AppShell() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </main>
-    <footer><span className="logo-crop footer-logo-crop"><img src={voltageLogo} alt="VOLTAGE" /></span><small>Televisión, música y cultura en movimiento.</small></footer>
+    <footer><span className="logo-crop footer-logo-crop"><img src={voltageLogo} alt="VOLTAGE" /></span><small>Televisión, música y cultura en movimiento.</small><nav className="footer-nav" aria-label="Navegación del pie"><Link to="/explorar">Explorar</Link><Link to="/programas">Programas</Link><Link to="/tv">TV en directo</Link><Link to="/eventos">Eventos</Link><Link to="/artistas">Artistas</Link></nav></footer>
   </div>
 }
 
+function usePrefersReducedMotion() {
+  const [reducedMotion, setReducedMotion] = useState(() => Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches))
+  useEffect(() => {
+    const preference = window.matchMedia?.('(prefers-reduced-motion: reduce)')
+    if (!preference) return undefined
+    const update = () => setReducedMotion(preference.matches)
+    if (preference.addEventListener) preference.addEventListener('change', update)
+    else preference.addListener?.(update)
+    return () => {
+      if (preference.removeEventListener) preference.removeEventListener('change', update)
+      else preference.removeListener?.(update)
+    }
+  }, [])
+  return reducedMotion
+}
+
+function videoThumbnail(source) {
+  const videoId = youtubeVideoId(source)
+  return videoId ? 'https://i.ytimg.com/vi/' + videoId + '/hqdefault.jpg' : ''
+}
+
+function programEntry(program, channels) {
+  const channel = channels.find((item) => item.id === program.channel_id)
+  return {
+    ...program,
+    kind: 'programa',
+    label: 'Programa',
+    channel,
+    channelName: channel?.name || 'Canal VTE',
+    thumbnail: videoThumbnail(program.video_source),
+    href: '/contenido/programa/' + program.id,
+  }
+}
+
+function eventEntry(event, channels) {
+  const channel = channels.find((item) => item.id === event.channel_id)
+  return {
+    ...event,
+    kind: 'evento',
+    label: 'Evento',
+    channel,
+    channelName: channel?.name || 'VOLTAGE',
+    thumbnail: videoThumbnail(event.video_source),
+    href: '/contenido/evento/' + event.id,
+  }
+}
+
+function getProgramEntries(media) {
+  return media.programs.map((program) => programEntry(program, media.channels))
+}
+
+function getCatalogEntries(media) {
+  return [
+    ...getProgramEntries(media).filter((item) => item.video_source),
+    ...media.events.filter((item) => item.video_source && item.status !== 'cancelled').map((event) => eventEntry(event, media.channels)),
+  ].sort((a, b) => new Date(b.created_at || b.starts_at) - new Date(a.created_at || a.starts_at))
+}
+
+function MediaCard({ item }) {
+  return <Link className="media-card" to={item.href} aria-label={'Ver ficha de ' + item.title}>
+    <span className="media-card-poster">
+      {item.thumbnail ? <img src={item.thumbnail} alt="" loading="lazy" decoding="async" /> : <img className="media-card-brand" src={voltageLogo} alt="" loading="lazy" />}
+      <span className="media-card-type">{item.label}</span>
+      {item.video_source && <span className="media-card-play" aria-hidden="true">▶</span>}
+    </span>
+    <span className="media-card-copy"><small>{item.channelName}</small><strong>{item.title}</strong><span>{item.description || 'Consulta la información y disponibilidad de este contenido.'}</span></span>
+  </Link>
+}
+
+function ContentRail({ title, eyebrow, items, moreTo, moreLabel = 'Ver todo' }) {
+  const railRef = useRef(null)
+  const reducedMotion = usePrefersReducedMotion()
+  if (!items.length) return null
+  const move = (direction) => railRef.current?.scrollBy({ left: direction * Math.max(280, railRef.current.clientWidth * .78), behavior: reducedMotion ? 'auto' : 'smooth' })
+  return <section className="section-block content-section">
+    <div className="section-heading"><div><span className="eyebrow">{eyebrow}</span><h2>{title}</h2></div><div className="rail-actions">{moreTo && <Link to={moreTo}>{moreLabel} <span aria-hidden="true">↗</span></Link>}<button type="button" onClick={() => move(-1)} aria-label={'Desplazar ' + title + ' a la izquierda'}>←</button><button type="button" onClick={() => move(1)} aria-label={'Desplazar ' + title + ' a la derecha'}>→</button></div></div>
+    <div className="media-rail" ref={railRef}>{items.map((item) => <MediaCard key={item.kind + ':' + item.id} item={item} />)}</div>
+  </section>
+}
+
 function HomePage({ auth, media }) {
-  const [channelId, setChannelId] = useState(null)
-  const channel = media.channels.find((item) => item.id === channelId) || media.channels.find((item) => item.is_active) || media.channels[0]
-  const liveEvent = media.events.find((event) => event.channel_id === channel?.id && getEventStatus(event, media.serverNow) === 'live')
-    return <>
-    <section className="hero"><div className="hero-copy"><span className="eyebrow">UNA NUEVA SEÑAL · VOLTAGE®</span><h1>Esto es <span>VOLTAGE.</span></h1><p>Un espacio para descubrir música, artistas y cultura. Entra en directo y encuentra lo que viene.</p><div className="hero-actions"><Link className="button primary" to="/tv">Ver televisión <span>↗</span></Link><Link className="button quiet" to="/guia">Explorar guía</Link></div></div><div className="hero-art" aria-label="VOLTAGE, señal en movimiento"><span className="logo-crop hero-logo-crop"><img src={voltageLogo} alt="VOLTAGE" /></span><i>TELEVISIÓN · MÚSICA · CULTURA</i><div className="signal a" /><div className="signal b" /><div className="signal c" /></div></section>
-    <section className="home-player section-block"><div className="section-heading"><div><span className="eyebrow">EN PANTALLA</span><h2>Televisión en directo</h2></div><Link to="/tv">Abrir reproductor →</Link></div><VideoPlayer channel={channel} programs={media.broadcastPrograms} activeEvent={liveEvent} timezone={timezone} serverNow={media.serverNow} serverClockSynced={media.serverClockSynced} /></section>
-    <section className="section-block"><div className="section-heading"><div><span className="eyebrow">SEÑAL</span><h2>Canales disponibles</h2></div><Link to="/canales">Todos los canales →</Link></div>{media.loading ? <LoadingGrid /> : <div className="channel-rail">{media.channels.slice(0, 4).map((item) => <button className={`channel-card ${channel?.id === item.id ? 'selected' : ''}`} key={item.id} onClick={() => setChannelId(item.id)}><ChannelMark channel={item} /><div><Status tone={item.is_active ? 'live' : 'muted'}>{item.is_active ? 'Disponible' : 'Pausado'}</Status><strong>{item.name}</strong><p>{item.description}</p></div><span className="card-arrow">↗</span></button>)}</div>}</section>
-    <section className="section-block split-overview"><ProgramSnapshot channels={media.channels} programs={media.broadcastPrograms} now={media.serverNow} /><EventSnapshot events={media.events} now={media.serverNow} /></section>
-    <section className="section-block artist-feature"><div className="section-heading"><div><span className="eyebrow">PERSONAS DETRÁS DE LA SEÑAL</span><h2>Artistas y proyectos VTE</h2><p>Descubre los canales creativos que forman parte de la programación.</p></div><Link to="/artistas">Ver artistas ↗</Link></div>{media.loading ? <LoadingGrid /> : <ArtistGrid channels={media.channels} preview />}</section>
-    <section className="section-block voltage-experience"><div className="section-heading"><div><span className="eyebrow">VTE · EN VIVO Y EN COMUNIDAD</span><h2>Más que una señal</h2><p>Programación continua, eventos y artistas reunidos en un solo espacio.</p></div></div><div className="experience-grid"><Link className="experience-card" to="/tv"><span>01 / EMISIÓN 24·7</span><h3>Siempre hay algo en pantalla.</h3><p>Sintoniza las señales VTE y descubre qué se está emitiendo ahora.</p><b>Ver televisión ↗</b></Link><Link className="experience-card" to="/eventos"><span>02 / EVENTOS</span><h3>Momentos para vivir en directo.</h3><p>Consulta las próximas emisiones especiales y galas publicadas.</p><b>Explorar agenda ↗</b></Link><Link className="experience-card" to="/artistas"><span>03 / TALENTO</span><h3>Una escena en movimiento.</h3><p>Conoce los artistas y proyectos que ponen voz a la programación.</p><b>Conocer artistas ↗</b></Link></div></section>
-    <section className="member-cta"><div><span className="eyebrow">TU ESPACIO</span><h2>Guarda lo que quieres volver a ver.</h2><p>Mi lista se sincroniza de forma segura entre dispositivos cuando inicias sesión.</p></div><Link className="button primary" to={auth.user ? '/mi-lista' : '/acceso'}>{auth.user ? 'Ir a Mi lista' : 'Crear cuenta'}</Link></section>
-  </>
+  const reducedMotion = usePrefersReducedMotion()
+  const activeChannels = media.channels.filter((channel) => channel.is_active)
+  const featuredChannel = activeChannels[0] || media.channels[0]
+  const featuredSchedule = getChannelSchedule(featuredChannel?.id, media.broadcastPrograms, media.serverNow)
+  const liveEvent = media.events.find((event) => event.channel_id === featuredChannel?.id && getEventStatus(event, media.serverNow) === 'live')
+  const featuredProgram = featuredSchedule.current && !featuredSchedule.current.is_fallback ? featuredSchedule.current : null
+  const source = liveEvent?.video_source || featuredProgram?.video_source || featuredSchedule.current?.video_source || featuredChannel?.video_source || featuredChannel?.fallback_video_source || ''
+  const title = liveEvent?.title || featuredProgram?.title || featuredChannel?.name || 'VOLTAGE'
+  const description = liveEvent?.description || featuredProgram?.description || featuredChannel?.description || 'Televisión, música y cultura en una misma señal.'
+  const thumbnail = videoThumbnail(source)
+  const heroVideo = featuredSchedule.current?.is_fallback && /\.(mp4|webm)(\?.*)?$/i.test(source) ? source : ''
+  const isLive = Boolean(liveEvent || featuredSchedule.current?.video_source || featuredChannel?.video_source || featuredChannel?.fallback_video_source)
+  const featuredHref = liveEvent?.id ? '/contenido/evento/' + liveEvent.id : '/tv' + (featuredChannel?.id ? '?channel=' + featuredChannel.id : '')
+  const catalog = getCatalogEntries(media)
+  const upcomingEvents = media.events.filter((event) => event.status !== 'cancelled' && getEventStatus(event, media.serverNow) !== 'finished')
+    .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at))
+    .map((event) => eventEntry(event, media.channels)).slice(0, 10)
+  const upcomingPrograms = getProgramEntries(media)
+    .filter((program) => new Date(program.ends_at) > media.serverNow)
+    .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at)).slice(0, 10)
+  const channelItems = activeChannels.map((channel) => {
+    const schedule = getChannelSchedule(channel.id, media.broadcastPrograms, media.serverNow)
+    const program = schedule.current || { id: channel.id, title: channel.name, description: channel.description, video_source: channel.video_source || channel.fallback_video_source, starts_at: media.serverNow.toISOString() }
+    return { ...programEntry(program, media.channels), id: channel.id, kind: 'canal', label: 'En directo', channelName: channel.name, href: '/tv?channel=' + channel.id }
+  })
+
+  return <div className="home-page">
+    <section className="hero hero-editorial">
+      {thumbnail && <img className="hero-backdrop" src={thumbnail} alt="" fetchPriority="high" />}
+      {!thumbnail && heroVideo && !reducedMotion && <video className="hero-backdrop" src={heroVideo} autoPlay muted loop playsInline preload="metadata" aria-hidden="true" />}
+      <div className="hero-copy"><span className="eyebrow"><i className={isLive ? 'live-dot' : ''} />{isLive ? 'EN DIRECTO · VOLTAGE' : 'VOLTAGE · TELEVISIÓN Y CULTURA'}</span><p className="hero-channel">{liveEvent ? 'EVENTO ESPECIAL' : featuredChannel?.name || 'VOLTAGE'}</p><h1>{title}</h1><p className="hero-description">{description}</p><div className="hero-actions"><Link className="button primary" to={featuredHref}>{isLive ? 'Ver en directo' : 'Ver programación'} <span>▶</span></Link><Link className="button quiet" to="/programas">Programación</Link></div></div>
+      <div className="hero-pagination" aria-hidden="true"><span className="active" /><span /><span /></div><span className="hero-frame-label">VOLTAGE® <i>01 / SEÑAL</i></span>
+    </section>
+    {media.error && <div className="home-notice"><Notice tone="error">{media.error}</Notice></div>}
+    {media.loading ? <section className="section-block"><LoadingGrid /></section> : <>
+      <ContentRail eyebrow="AHORA EN VOLTAGE" title="Canales en directo" items={channelItems} moreTo="/tv" moreLabel="Todos los canales" />
+      <ContentRail eyebrow="CATÁLOGO" title="Últimos vídeos" items={catalog.slice(0, 12)} moreTo="/explorar" moreLabel="Explorar catálogo" />
+      <ContentRail eyebrow="PRÓXIMAMENTE" title="Programación publicada" items={upcomingPrograms} moreTo="/programas" moreLabel="Ver programación" />
+      <ContentRail eyebrow="AGENDA VOLTAGE" title="Eventos" items={upcomingEvents} moreTo="/eventos" moreLabel="Ver agenda" />
+      <section className="section-block split-overview"><ProgramSnapshot channels={media.channels} programs={media.broadcastPrograms} now={media.serverNow} /><EventSnapshot events={media.events} now={media.serverNow} /></section>
+      {getArtistProjects(media.channels).length > 0 && <section className="section-block artist-feature"><div className="section-heading"><div><span className="eyebrow">PERSONAS DETRÁS DE LA SEÑAL</span><h2>Artistas y proyectos VTE</h2></div><Link to="/artistas">Ver artistas ↗</Link></div><ArtistGrid channels={media.channels} preview /></section>}
+      <section className="home-editorial-links"><div><span className="eyebrow">DESCUBRE VOLTAGE</span><h2>Una señal, muchas formas de vivirla.</h2><p>Explora los canales, artistas y eventos publicados por el equipo.</p></div><div className="editorial-link-list"><Link to="/artistas">Artistas y proyectos <span>↗</span></Link><Link to="/canales">Todos los canales <span>↗</span></Link><Link to="/guia">Guía de televisión <span>↗</span></Link></div></section>
+      <section className="member-cta"><div><span className="eyebrow">TU ESPACIO</span><h2>Guarda lo que quieres volver a ver.</h2><p>Mi lista se sincroniza de forma segura entre dispositivos cuando inicias sesión.</p></div><Link className="button primary" to={auth.user ? '/mi-lista' : '/acceso'}>{auth.user ? 'Ir a Mi lista' : 'Crear cuenta'}</Link></section>
+    </>}
+  </div>
+}
+function CatalogPage({ media }) {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const query = searchParams.get('q') || ''
+  const type = searchParams.get('tipo') || 'todos'
+  const channelId = searchParams.get('canal') || ''
+  const sort = searchParams.get('orden') || 'recientes'
+  const entries = getCatalogEntries(media).filter((item) => {
+    const matchesQuery = (item.title + ' ' + item.description + ' ' + item.channelName).toLocaleLowerCase('es').includes(query.toLocaleLowerCase('es'))
+    return matchesQuery && (type === 'todos' || item.kind === type) && (!channelId || item.channel?.id === channelId)
+  }).sort((a, b) => {
+    const direction = sort === 'antiguos' ? 1 : -1
+    return direction * (new Date(a.created_at || a.starts_at) - new Date(b.created_at || b.starts_at))
+  })
+  const update = (name, value) => {
+    const next = new URLSearchParams(searchParams)
+    if (value) next.set(name, value)
+    else next.delete(name)
+    setSearchParams(next, { replace: true })
+  }
+  return <div className="page catalog-page">
+    <PageIntro eyebrow="CATÁLOGO VOLTAGE" title="Explorar" detail="Vídeos y programas publicados por VOLTAGE. Busca por título o filtra por formato y canal." />
+    <div className="catalog-toolbar">
+      <label className="catalog-search"><span aria-hidden="true">⌕</span><input type="search" value={query} onChange={(event) => update('q', event.target.value)} placeholder="Buscar títulos, programas o canales" aria-label="Buscar en el catálogo" /></label>
+      <label><span className="sr-only">Tipo de contenido</span><select value={type} onChange={(event) => update('tipo', event.target.value)}><option value="todos">Todos los formatos</option><option value="programa">Programas</option><option value="evento">Eventos</option></select></label>
+      <label><span className="sr-only">Canal</span><select value={channelId} onChange={(event) => update('canal', event.target.value)}><option value="">Todos los canales</option>{media.channels.map((channel) => <option key={channel.id} value={channel.id}>{channel.name}</option>)}</select></label>
+      <label><span className="sr-only">Ordenar resultados</span><select value={sort} onChange={(event) => update('orden', event.target.value)}><option value="recientes">Más recientes</option><option value="antiguos">Más antiguos</option></select></label>
+    </div>
+    {!media.loading && <p className="catalog-count">{entries.length} {entries.length === 1 ? 'contenido publicado' : 'contenidos publicados'}</p>}
+    {media.loading ? <LoadingGrid /> : entries.length ? <div className="catalog-grid">{entries.map((item) => <MediaCard key={item.kind + ':' + item.id} item={item} />)}</div> : <EmptyState title={query ? 'No encontramos resultados' : 'Todavía no hay vídeos publicados'} detail={query ? 'Prueba con otro título o cambia los filtros.' : 'El catálogo mostrará vídeos cuando haya programas o eventos con una fuente de vídeo configurada.'} action={query || type !== 'todos' || channelId ? 'Ver todo el catálogo' : undefined} to={query || type !== 'todos' || channelId ? '/explorar' : undefined} />}
+  </div>
+}
+
+function ProgramsPage({ media }) {
+  const programs = getProgramEntries(media).sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at))
+  const now = media.serverNow.getTime()
+  const upcoming = programs.filter((program) => new Date(program.ends_at).getTime() > now)
+  const past = programs.filter((program) => new Date(program.ends_at).getTime() <= now).reverse()
+  const ordered = [...upcoming, ...past]
+  return <div className="page programs-page">
+    <PageIntro eyebrow="PARRILLA VOLTAGE" title="Programas" detail="Consulta las emisiones publicadas y accede a sus fichas. Los horarios se sincronizan con el reloj de Supabase." />
+    <div className="programs-intro-links"><Link className="button quiet" to="/guia">Abrir guía de televisión <span>↗</span></Link><Link className="button quiet" to="/tv">Sintonizar un canal <span>▶</span></Link></div>
+    {media.error && <Notice tone="error">{media.error}</Notice>}
+    {media.loading ? <LoadingGrid /> : ordered.length ? <div className="program-catalog-list">{ordered.map((program) => {
+      const start = new Date(program.starts_at).getTime()
+      const end = new Date(program.ends_at).getTime()
+      const current = start <= now && end > now
+      const label = current ? 'En emisión' : start > now ? 'Próximo' : 'Finalizado'
+      return <Link className="program-catalog-row" to={program.href} key={program.id}>
+        <span className="program-catalog-time"><time>{formatDateTime(program.starts_at, timezone, false)}</time><small>{formatDateTime(program.ends_at, timezone, false)}</small></span>
+        <ChannelMark channel={program.channel} compact />
+        <span className="program-catalog-copy"><small>{program.channelName} · {program.label}</small><strong>{program.title}</strong><span>{program.description || 'Sin descripción adicional.'}</span></span>
+        <Status tone={current ? 'live' : start > now ? 'violet' : 'muted'}>{label}</Status><span className="program-catalog-arrow" aria-hidden="true">↗</span>
+      </Link>
+    })}</div> : <EmptyState title="Aún no hay programas" detail="Los horarios publicados por el equipo aparecerán aquí." action="Ver televisión" to="/tv" />}
+  </div>
+}
+
+function ContentPlayer({ source, title }) {
+  const videoId = youtubeVideoId(source)
+  const embedUrl = youtubeContentEmbedUrl(source)
+  if (videoId && embedUrl) return <div className="detail-player"><iframe src={embedUrl} title={'Reproductor de ' + title} allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" /></div>
+  if (/^https:\/\/.*\.(mp4|webm)(\?.*)?$/i.test(source || '')) return <div className="detail-player"><video src={source} controls playsInline preload="metadata" aria-label={'Reproductor de ' + title} /></div>
+  return <Notice>La fuente de este contenido no se puede reproducir aquí. Comprueba el formato y los permisos de inserción.</Notice>
+}
+
+function ContentDetailPage({ auth, media }) {
+  const { type, id } = useParams()
+  const isProgram = type === 'programa'
+  const rawItem = isProgram ? media.programs.find((item) => item.id === id) : type === 'evento' ? media.events.find((item) => item.id === id) : null
+  const item = rawItem ? isProgram ? programEntry(rawItem, media.channels) : eventEntry(rawItem, media.channels) : null
+  const channel = item?.channel
+  const related = item && channel ? getCatalogEntries(media).filter((entry) => entry.channel?.id === channel.id && entry.id !== item.id).slice(0, 8) : []
+  const savedKey = item ? (isProgram ? 'program:' : 'event:') + item.id : ''
+  const saved = media.savedVideos.some((entry) => entry.content_key === savedKey)
+  const [saveError, setSaveError] = useState(null)
+  const save = async () => {
+    setSaveError(null)
+    try {
+      await media.toggleSavedVideo({ content_key: savedKey, title: item.title, thumbnail_url: item.thumbnail, video_source: item.video_source || '' })
+    } catch (error) {
+      setSaveError(error.message)
+    }
+  }
+  if (!item) return <div className="page"><EmptyState title="No encontramos este contenido" detail="Puede que se haya retirado o que el enlace ya no esté disponible." action="Explorar catálogo" to="/explorar" /></div>
+  const eventStatus = isProgram ? null : getEventStatus(item, media.serverNow)
+  const status = isProgram
+    ? new Date(item.starts_at) <= media.serverNow && new Date(item.ends_at) > media.serverNow ? 'En emisión' : new Date(item.starts_at) > media.serverNow ? 'Próximo' : 'Finalizado'
+    : eventStatus === 'live' ? 'En directo' : eventStatus === 'cancelled' ? 'Cancelado' : eventStatus === 'finished' ? 'Finalizado' : 'Programado'
+  const dateLabel = formatDateTime(item.starts_at, timezone, true) + (item.ends_at ? ' · ' + formatDateTime(item.ends_at, timezone, false) : '')
+  return <div className="page content-detail-page">
+    <Link className="detail-back" to="/explorar">← Volver a Explorar</Link>
+    <section className="detail-hero">
+      {item.thumbnail && <img src={item.thumbnail} alt="" />}
+      <div className="detail-hero-copy"><span className="eyebrow">{item.label} · {channel?.name || 'VOLTAGE'}</span><h1>{item.title}</h1><p>{item.description || 'Sin descripción adicional.'}</p><div className="detail-meta"><Status tone={status === 'En directo' || status === 'En emisión' ? 'live' : status === 'Próximo' || status === 'Programado' ? 'violet' : 'muted'}>{status}</Status><span>{dateLabel}</span>{channel && <span>{channel.name}</span>}</div><div className="detail-actions">{channel && <Link className="button primary" to={'/tv?channel=' + channel.id}>{status === 'En directo' || status === 'En emisión' ? 'Sintonizar canal' : 'Ver canal'} <span>▶</span></Link>}{auth.user ? <button className="button quiet" type="button" onClick={save}>{saved ? 'Quitar de Mi lista' : 'Guardar en Mi lista'}</button> : <Link className="button quiet" to="/acceso">Acceder para guardar</Link>}</div></div>
+    </section>
+    {saveError && <Notice tone="error">{saveError}</Notice>}
+    {item.video_source ? <ContentPlayer source={item.video_source} title={item.title} /> : <Notice>Este elemento no tiene un vídeo propio configurado. Puedes consultar la emisión del canal en su horario.</Notice>}
+    {related.length > 0 && <ContentRail eyebrow={'MÁS DE ' + (channel?.name || 'VOLTAGE').toUpperCase()} title="Contenido relacionado" items={related} moreTo="/explorar" />}
+  </div>
 }
 
 function getArtistProjects(channels) {
@@ -253,17 +486,28 @@ function EventsPage({ media }) {
 
 function EventCard({ event, media }) {
   const status = getEventStatus(event, media.serverNow)
-  const isSaved = media.savedVideos.some((item) => item.content_key === `event:${event.id}`)
-  const save = async () => { try { await media.toggleSavedVideo({ content_key: `event:${event.id}`, title: event.title, thumbnail_url: '', video_source: event.video_source || '' }) } catch (error) { window.alert(error.message) } }
-  return <article className="event-card"><div className="event-visual"><span>VTE</span><Status tone={status === 'live' ? 'live' : status === 'cancelled' ? 'error' : 'violet'}>{status === 'live' ? 'En directo' : status === 'cancelled' ? 'Cancelado' : status === 'finished' ? 'Finalizado' : 'Programado'}</Status></div><div className="event-content"><small>{new Intl.DateTimeFormat('es-ES', { dateStyle: 'long', timeStyle: 'short', timeZone: timezone }).format(new Date(event.starts_at))}</small><h2>{event.title}</h2><p>{event.description || 'Sin descripción adicional.'}</p><div className="card-actions"><Link className="text-link" to="/tv">Ir a televisión →</Link><button className="icon-action" onClick={save} aria-label={isSaved ? 'Quitar de Mi lista' : 'Guardar en Mi lista'}>{isSaved ? '★' : '☆'}</button></div></div></article>
+  const isSaved = media.savedVideos.some((item) => item.content_key === 'event:' + event.id)
+  const save = async () => {
+    try {
+      await media.toggleSavedVideo({ content_key: 'event:' + event.id, title: event.title, thumbnail_url: videoThumbnail(event.video_source), video_source: event.video_source || '' })
+    } catch (error) {
+      window.alert(error.message)
+    }
+  }
+  const entry = eventEntry(event, media.channels)
+  return <article className="event-card"><Link className="event-visual" to={entry.href} style={entry.thumbnail ? { backgroundImage: 'linear-gradient(180deg, rgba(8,7,8,.08), rgba(8,7,8,.8)), url("' + entry.thumbnail + '")' } : undefined} aria-label={'Ver ' + event.title}><span>VTE</span><Status tone={status === 'live' ? 'live' : status === 'cancelled' ? 'error' : 'violet'}>{status === 'live' ? 'En directo' : status === 'cancelled' ? 'Cancelado' : status === 'finished' ? 'Finalizado' : 'Programado'}</Status></Link><div className="event-content"><small>{new Intl.DateTimeFormat('es-ES', { dateStyle: 'long', timeStyle: 'short', timeZone: timezone }).format(new Date(event.starts_at))}</small><h2><Link to={entry.href}>{event.title}</Link></h2><p>{event.description || 'Sin descripción adicional.'}</p><div className="card-actions"><Link className="text-link" to={entry.href}>Ver detalles →</Link><button className="icon-action" onClick={save} aria-label={isSaved ? 'Quitar de Mi lista' : 'Guardar en Mi lista'}>{isSaved ? '★' : '☆'}</button></div></div></article>
 }
-
 function SavedPage({ auth, media }) {
   if (!auth.user) return <div className="page"><EmptyState title="Tu lista te espera" detail="Inicia sesión para guardar contenidos y encontrarlos en cualquiera de tus dispositivos." action="Iniciar sesión" to="/acceso" /></div>
   const remove = async (item) => { try { await media.toggleSavedVideo(item) } catch (error) { window.alert(error.message) } }
-  return <div className="page"><PageIntro eyebrow="COLECCIÓN PERSONAL" title="Mi lista" detail="Tus guardados se almacenan en tu cuenta, no en el navegador." />{media.loading ? <LoadingGrid /> : media.savedVideos.length ? <div className="saved-grid">{media.savedVideos.map((item) => <article className="saved-card" key={item.id}><div className="saved-art"><span>VTE</span></div><div><h2>{item.title}</h2><p>{new Intl.DateTimeFormat('es-ES', { dateStyle: 'medium', timeZone: timezone }).format(new Date(item.created_at))}</p></div><div className="card-actions"><Link className="text-link" to="/tv">Reproducir →</Link><button className="icon-action filled" onClick={() => remove(item)} aria-label={`Quitar ${item.title} de Mi lista`}>★</button></div></article>)}</div> : <EmptyState title="Todavía no has guardado nada" detail="Usa la estrella en un evento para añadirlo a esta lista. Tus favoritos se sincronizarán al iniciar sesión en otro dispositivo." to="/eventos" action="Ver eventos" />}</div>
+  const savedHref = (item) => {
+    const parts = (item.content_key || '').split(':')
+    if (parts[0] === 'event' || parts[0] === 'evento') return '/contenido/evento/' + parts[1]
+    if (parts[0] === 'program' || parts[0] === 'programa') return '/contenido/programa/' + parts[1]
+    return item.video_source ? '/explorar' : '/tv'
+  }
+  return <div className="page"><PageIntro eyebrow="COLECCIÓN PERSONAL" title="Mi lista" detail="Tus guardados se almacenan en tu cuenta, no en el navegador." />{media.loading ? <LoadingGrid /> : media.savedVideos.length ? <div className="saved-grid">{media.savedVideos.map((item) => <article className="saved-card" key={item.id}><Link className="saved-art" to={savedHref(item)}>{item.thumbnail_url ? <img src={item.thumbnail_url} alt="" loading="lazy" /> : <img src={voltageLogo} alt="" />}</Link><div><h2><Link to={savedHref(item)}>{item.title}</Link></h2><p>{new Intl.DateTimeFormat('es-ES', { dateStyle: 'medium', timeZone: timezone }).format(new Date(item.created_at))}</p></div><div className="card-actions"><Link className="text-link" to={savedHref(item)}>Ver contenido →</Link><button className="icon-action filled" onClick={() => remove(item)} aria-label={'Quitar ' + item.title + ' de Mi lista'}>★</button></div></article>)}</div> : <EmptyState title="Todavía no has guardado nada" detail="Guarda programas y eventos para volver a encontrarlos aquí en cualquier dispositivo." to="/explorar" action="Explorar catálogo" />}</div>
 }
-
 function AccessPage({ auth }) {
   const [mode, setMode] = useState('signin')
   const [form, setForm] = useState({ username: '', email: '', password: '' })

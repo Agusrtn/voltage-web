@@ -48,6 +48,21 @@ export function youtubeEmbedUrl(source, startSeconds = 0) {
   }
 }
 
+export function youtubeContentEmbedUrl(source) {
+  const videoId = youtubeVideoId(source)
+  if (!videoId) return null
+  try {
+    const embed = new URL(`https://www.youtube-nocookie.com/embed/${videoId}`)
+    embed.searchParams.set('autoplay', '0')
+    embed.searchParams.set('controls', '1')
+    embed.searchParams.set('playsinline', '1')
+    embed.searchParams.set('rel', '0')
+    return embed.toString()
+  } catch {
+    return null
+  }
+}
+
 export function isEmbeddableSource(source) {
   return Boolean(youtubeEmbedUrl(source)) || /^https:\/\/.*\.(m3u8|mp4)(\?.*)?$/i.test(source || '')
 }
